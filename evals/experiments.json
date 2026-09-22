@@ -72,6 +72,133 @@
   ],
   "results": [
     {
+      "experiment_id": "runtime_profile_bakeoff",
+      "recorded_on": "2026-09-22",
+      "phase": "pilot",
+      "tier": "experiment",
+      "status": "completed",
+      "runner": "scripts/run-experiment.py runtime_profile_bakeoff --phase pilot",
+      "seeds": [
+        104729,
+        130363,
+        155921
+      ],
+      "frozen": {
+        "runtime_profile_id": "local_mitos_ollama_reproduction",
+        "execution_route_id": "local_web_tools",
+        "dataset_version": "3.0.0",
+        "dataset_digest": "b1e6e9a3b5b534a3b2e008857d3d49af9beca513fd93eafbf83fe228e32290ff",
+        "harness_digest": "53bdb45ee64d1253041d26fa900a75133a1ee839300a0f7346a850227823ab75",
+        "tool_registry_digest": "e1dbee48ce312924de041d3de7da7d3dd4b9f3e38be961df16618c5bbb53ff7c",
+        "operator_prompt_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "model_view_format": "json",
+        "runtime_profile_digest": "a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74"
+      },
+      "arms": [
+        {
+          "arm_id": "mitos_control",
+          "runtime_profile_id": "local_mitos_ollama_reproduction",
+          "runtime_profile_digest": "a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74",
+          "case_count": 15,
+          "verdict_counts": {
+            "pass": 13,
+            "fail": 2,
+            "inconclusive": 0
+          },
+          "mean_latency_ms": 16300.0
+        },
+        {
+          "arm_id": "agents_a1_4b",
+          "runtime_profile_id": "agents_a1_4b_llamacpp",
+          "runtime_profile_digest": "d93c393a9bd5139a4b5cfe24d31ef553c5a497bfb8afec178a354ecbf508f062",
+          "case_count": 15,
+          "verdict_counts": {
+            "pass": 11,
+            "fail": 4,
+            "inconclusive": 0
+          },
+          "mean_latency_ms": 6373.0
+        },
+        {
+          "arm_id": "gemma4_e4b_qat",
+          "runtime_profile_id": "gemma4_e4b_qat_ollama",
+          "runtime_profile_digest": "bd0b01eca795c325997c317115539f6465193c1daece8579bc80a038d21a9a92",
+          "case_count": 15,
+          "verdict_counts": {
+            "pass": 13,
+            "fail": 2,
+            "inconclusive": 0
+          },
+          "mean_latency_ms": 21048.0
+        },
+        {
+          "arm_id": "qwen35_9b",
+          "runtime_profile_id": "qwen35_9b_ollama",
+          "runtime_profile_digest": "120f1120724c1343270c1b17177172b785e6e183ce4f3e4101f63ed2c30425af",
+          "case_count": 15,
+          "verdict_counts": {
+            "pass": 14,
+            "fail": 1,
+            "inconclusive": 0
+          },
+          "mean_latency_ms": 20380.0
+        },
+        {
+          "arm_id": "cove_4b",
+          "runtime_profile_id": "cove_4b_llamacpp",
+          "runtime_profile_digest": "48f857bd80ed52d1fddb2da8dfff72114d59d3e8d2eb7c025e3519a455aa4458",
+          "case_count": 15,
+          "verdict_counts": {
+            "pass": 5,
+            "fail": 10,
+            "inconclusive": 0
+          },
+          "mean_latency_ms": 20279.0
+        },
+        {
+          "arm_id": "gemma4_e4b_toolcall",
+          "runtime_profile_id": "gemma4_e4b_toolcall_llamacpp",
+          "runtime_profile_digest": "e5c4501fc23c77bc890541a4db4bdde7f7e77f4d4cbbe4039113c0435d0df63c",
+          "case_count": 15,
+          "verdict_counts": {
+            "pass": 4,
+            "fail": 11,
+            "inconclusive": 0
+          },
+          "mean_latency_ms": 41199.0
+        },
+        {
+          "arm_id": "granite41_8b",
+          "runtime_profile_id": "granite41_8b_ollama",
+          "runtime_profile_digest": "4dc873bed62bad5afb19ca5d54f737a54ed36fdf1ff801f713dbadd26169427e",
+          "case_count": 15,
+          "verdict_counts": {
+            "pass": 12,
+            "fail": 3,
+            "inconclusive": 0
+          },
+          "mean_latency_ms": 14137.0
+        }
+      ],
+      "security_violations": 0,
+      "verdict": "directional_only",
+      "environment": {
+        "ollama": "0.32.5",
+        "llama_cpp": "b11114 vulkan",
+        "gpu": "AMD Radeon RX 7600",
+        "model_profiles_digest": "54e3e3d08413b8bdf268adb4ef62988622000be1274b8ad1dc8e89a55fec49f8",
+        "repository_commit": "e8dd79a"
+      },
+      "notes": [
+        "frozen names the control arm's profile; each Challenger arm carries its own runtime_profile_id and runtime_profile_digest in arms[].",
+        "Pilot, 15 cases per arm: direction, not decision. Every arm had zero security or taint violations.",
+        "qwen35_9b is the only arm that passed edit_preserves_whitespace_round_trip (1 draw), and passed tool_write_required_relative_path where the control failed with malformed_model_response_limit; it runs with 2 GB of its 7.2 GB off the GPU.",
+        "agents_a1_4b is by far the fastest (mean 6.4 s per case against 16.3 s for the control) and fits the card with room, but failed both unknown_shell_recovers_with_glob draws.",
+        "cove_4b (5/15) and gemma4_e4b_toolcall (4/15) fall well below the control; the tool-calling fine-tune also missed the long-prompt probe, consistent with its 4k training sequences.",
+        "The draws did not include vision_is_not_silently_available nor corpus_answer_admits_the_acervo_does_not_say; the promotion run covers every fixture."
+      ]
+    },
+    {
       "experiment_id": "model_view_serialization",
       "recorded_on": "2026-08-15",
       "phase": "promotion",
