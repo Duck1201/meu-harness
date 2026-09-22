@@ -26,12 +26,6 @@ harness = "harness.__main__:main"
 browser = [
     "scrapling[fetchers]>=0.4.15,<0.5",
 ]
-# Juiz de Corpus (ADR 0015). O torch vem do índice CPU do PyTorch: o juiz roda na
-# CPU para não disputar a VRAM com o modelo de chat, e o wheel padrão traz CUDA.
-judge = [
-    "laya==0.3.6",
-    "torch>=2.4",
-]
 
 [dependency-groups]
 dev = [
@@ -39,14 +33,6 @@ dev = [
     "pytest>=8.4.1",
     "ruff>=0.12.8",
 ]
-
-[tool.uv.sources]
-torch = [{ index = "pytorch-cpu", extra = "judge" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
 
 [build-system]
 requires = ["hatchling"]

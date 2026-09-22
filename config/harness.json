@@ -207,11 +207,13 @@
     "answer_judge": {
       "mode": "disabled",
       "threshold": 0.5,
-      "model": "convaiinnovations/laya multilingual",
-      "revision": "1c5edc17a7acd8701df6fc341c0d179f1c62c982",
-      "weights_sha256": "9d628fd971b700382ac6f65920a86f149777b2e748e0c955fb3b19695aa8f204",
-      "device": "cpu",
-      "adr": "docs/adr/0015-corpus-answer-judge-laya.md"
+      "model": "Qwen/Qwen3-Reranker-0.6B",
+      "ollama_tag": "hf.co/mradermacher/Qwen3-Reranker-0.6B-GGUF:Q8_0",
+      "ollama_digest": "5a1ea3ab8b66e04d9ae7559c4861d75cb1c6dfe358dff5ef142c58c6d4ffa6c8",
+      "gguf_sha256": "c525a7449243f690a7062e6377d6cf5adbb289354bd4316312367cd20e187ab7",
+      "scoring": "raw_prompt_yes_vs_no_logprob",
+      "device": "gpu_via_ollama",
+      "adr": "docs/adr/0015-corpus-answer-judge.md"
     },
     "scraper": {
       "authorized_by": "Operator",

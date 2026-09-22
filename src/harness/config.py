@@ -114,8 +114,8 @@ class CorpusAnswerJudgeConfig(ConfigModel):
     mode: Literal["disabled", "advisory"] = "disabled"
     threshold: float = 0.5
     model: str = ""
-    revision: str = ""
-    weights_sha256: str = ""
+    ollama_tag: str = ""
+    ollama_digest: str = ""
 
 
 class CorpusConfig(ConfigModel):

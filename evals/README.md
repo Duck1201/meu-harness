@@ -144,3 +144,17 @@ O comando valida JSON, RuntimeProfile/ExecutionRoute, as três coleções do
 registry, efeitos e grants, ResultPayload, fixtures/oráculos, digests e links
 Markdown locais. Resultados de experimento podem permanecer ausentes; digests e
 gates contratuais não.
+
+## Juiz de Corpus
+
+Medição que escolheu o juiz de [ADR-0015](../docs/adr/0015-corpus-answer-judge.md): 60 pares (pergunta, passagem) rotulados à mão em pt-BR, metade quase-acertos — mesmo assunto, dado ausente —, em 2026-09-22. O conjunto é pequeno: diferenças de dois ou três pares entre os melhores são ruído, e ele serve para descartar, não para ordenar os de cima.
+
+| Juiz | Onde | Acerto em 0,5 | AUC | Custo por Turn de 6 passagens |
+|---|---|---|---|---|
+| Jev (TypeSafe) | nuvem | 100% | 1,000 | ~4 s de rede; passagens saem da máquina |
+| Kev-4B | CPU | 96,7% | 0,999 | ~21 s |
+| **Qwen3-Reranker-0.6B, instrução em pt-BR** | **GPU via Ollama, Q8** | **85%** | **0,948** | **1,2 s, 746 MB de VRAM** |
+| Qwen3-Reranker-0.6B, instrução em pt-BR | CPU, transformers | 86,7% | 0,944 | 13 s |
+| bge-reranker-v2-m3 | CPU | 86,7% | 0,920 | ~4 s |
+| Kev-0.8B | CPU | 63% | 0,817 | ~3 s |
+| Laya multilingual | CPU | 70% | 0,703 | 0,6 s |

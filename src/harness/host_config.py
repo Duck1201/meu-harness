@@ -42,9 +42,6 @@ class HostConfig(BaseModel):
     llama_server_url: str = "http://127.0.0.1:8081"
     llama_server_executable: Path | None = None
     gguf_paths: Mapping[str, Path] = {}
-    # Diretório local do checkpoint do juiz de Corpus (ADR 0015); os pesos são
-    # conferidos contra `corpus.answer_judge.weights_sha256` do contrato.
-    answer_judge_model_dir: Path | None = None
 
     @field_validator("allowed_workspace_roots")
     @classmethod
@@ -135,7 +132,6 @@ _FIELDS_OUTSIDE_THE_FORM = (
     "llama_server_url",
     "llama_server_executable",
     "gguf_paths",
-    "answer_judge_model_dir",
 )
 
 

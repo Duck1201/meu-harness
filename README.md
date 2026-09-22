@@ -398,25 +398,19 @@ desligados até o experimento de ingestão medir o ganho
   uv run scrapling install     # baixa o Chromium do Scrapling
   ```
 - `answer_judge.mode: "advisory"` liga um juiz local no molde do Jev
-  ([ADR-0015](docs/adr/0015-corpus-answer-judge-laya.md)): o
-  [Laya](https://github.com/NandhaKishorM/laya) lê cada passagem recuperada e
-  anota a probabilidade de ela trazer o que foi perguntado; se nenhuma trouxer,
-  o modelo é avisado de que o acervo provavelmente não responde. Ele nunca
-  bloqueia nem reescreve a resposta. Roda em CPU, só a partir de um checkpoint
-  local conferido por digest:
+  ([ADR-0015](docs/adr/0015-corpus-answer-judge.md)): o Qwen3-Reranker-0.6B lê
+  cada passagem recuperada e anota a probabilidade de ela trazer o que foi
+  perguntado; se nenhuma trouxer, o modelo é avisado de que o acervo
+  provavelmente não responde. Ele nunca bloqueia nem reescreve a resposta. Roda
+  no mesmo Ollama, conferido por digest, e ocupa ~750 MB de VRAM:
 
   ```bash
-  uv sync --extra judge        # laya + torch de CPU
-  REV=1c5edc17a7acd8701df6fc341c0d179f1c62c982
-  D=~/.local/share/harness-2/laya/$REV/multilingual
-  for f in encoder/config.json model.safetensors rl_agent_config.json \
-           tokenizer/tokenizer.json tokenizer/tokenizer_config.json; do
-    mkdir -p "$D/$(dirname $f)"
-    curl -fL -o "$D/$f" "https://huggingface.co/convaiinnovations/laya/resolve/$REV/multilingual/$f"
-  done
+  ollama pull hf.co/mradermacher/Qwen3-Reranker-0.6B-GGUF:Q8_0
   ```
 
-  e declare `"answer_judge_model_dir": "<esse diretório>"` no `host.json`.
+  Chat, `bge-m3` e juiz cabem juntos em 8 GB, mas só se o Ollama puder manter
+  três modelos carregados — com `OLLAMA_MAX_LOADED_MODELS=2` o juiz desloca o
+  modelo de chat a cada Turn. Suba para 3 com `sudo systemctl edit ollama`.
 
 ## Desenvolvimento
 

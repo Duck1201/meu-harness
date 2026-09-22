@@ -1,13 +1,20 @@
 """O juiz de Corpus anota passagens e nunca decide a resposta (ADR 0015)."""
 
 import asyncio
-import hashlib
+import json
+import math
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 
+import httpx
 import pytest
 
-from harness.corpus_judge import AnswerJudgeUnavailableError, LayaAnswerJudge
+from harness.corpus_judge import (
+    INSTRUCTION,
+    AnswerJudgeUnavailableError,
+    OllamaRerankerAnswerJudge,
+    judge_prompt,
+    yes_probability,
+)
 from harness.corpus_service import (
     CITATION_INSTRUCTION,
     NOTHING_FOUND_INSTRUCTION,
@@ -76,59 +83,62 @@ def test_only_a_unanimous_no_changes_the_instruction() -> None:
     assert _instruction(_retrieval((), chunks=0)) == NOTHING_FOUND_INSTRUCTION
 
 
-class _Agent:
-    def __init__(self, answers: Sequence[float]) -> None:
-        self._answers = list(answers)
-        self.states: list[Mapping[str, str]] = []
-
-    def system_one(
-        self, state: Mapping[str, str], questions: Mapping[str, Mapping[str, object]]
-    ) -> Mapping[str, object]:
-        self.states.append(state)
-        assert questions["a"]["type"] == "noul"
-        return {"answers": {"a": {"type": "noul", "noul": self._answers.pop(0)}}}
+_DIGEST = "a" * 64
+_TAG = "hf.co/mradermacher/Qwen3-Reranker-0.6B-GGUF:Q8_0"
 
 
-def test_the_judge_asks_one_noul_per_passage(tmp_path: Path) -> None:
-    agent = _Agent([0.8, 0.1])
-    judge = LayaAnswerJudge(tmp_path, weights_sha256="0" * 64, agent=agent)
+def _ollama(
+    answers: Sequence[Mapping[str, float]], *, digest: str = _DIGEST
+) -> tuple[httpx.MockTransport, list[Mapping[str, object]]]:
+    """Um Ollama de mentira: /api/tags com a tag do juiz e /api/generate com logprobs."""
+    pending = list(answers)
+    sent: list[Mapping[str, object]] = []
 
-    coverage = asyncio.run(judge.supports("Qual o erro?", ["p1", "p2"]))
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": [{"name": _TAG, "digest": digest}]})
+        body = json.loads(request.content)
+        sent.append(body)
+        top = [{"token": token, "logprob": value} for token, value in pending.pop(0).items()]
+        return httpx.Response(200, json={"response": "no", "logprobs": [{"top_logprobs": top}]})
 
-    assert coverage == (0.8, 0.1)
-    assert agent.states == [
-        {"pergunta": "Qual o erro?", "passagem": "p1"},
-        {"pergunta": "Qual o erro?", "passagem": "p2"},
+    return httpx.MockTransport(handler), sent
+
+
+def _judge(transport: httpx.MockTransport) -> OllamaRerankerAnswerJudge:
+    return OllamaRerankerAnswerJudge(
+        base_url="http://ollama", model=_TAG, expected_digest=_DIGEST, transport=transport
+    )
+
+
+def test_each_passage_is_one_raw_prompt_scored_yes_against_no() -> None:
+    transport, sent = _ollama(
+        [{"yes": math.log(0.8), "no": math.log(0.2)}, {"no": -0.1, "No": -2.0, "yes": -5.0}]
+    )
+
+    coverage = asyncio.run(_judge(transport).supports("Qual o erro?", ["p1", "p2"]))
+
+    assert coverage[0] == pytest.approx(0.8)
+    assert coverage[1] == pytest.approx(1 / (1 + math.exp(-0.1 + 5.0)))
+    assert [body["prompt"] for body in sent] == [
+        judge_prompt("Qual o erro?", "p1"),
+        judge_prompt("Qual o erro?", "p2"),
     ]
+    assert all(body["raw"] is True and body["logprobs"] is True for body in sent)
+    assert INSTRUCTION in str(sent[0]["prompt"])
 
 
-def _checkpoint(tmp_path: Path, *, tokenizer: bool = True) -> str:
-    (tmp_path / "model.safetensors").write_bytes(b"weights")
-    if tokenizer:
-        (tmp_path / "tokenizer").mkdir()
-        (tmp_path / "tokenizer" / "tokenizer.json").write_text("{}", encoding="utf-8")
-    return hashlib.sha256(b"weights").hexdigest()
+def test_a_token_outside_the_top_list_counts_as_the_floor() -> None:
+    assert yes_probability({"yes": -0.05, "Yes": -3.0}) == pytest.approx(
+        1 / (1 + math.exp(-3.0 + 0.05))
+    )
 
 
-@pytest.mark.parametrize(
-    ("setup", "code"),
-    [
-        ("missing", "judge_not_installed"),
-        ("no_tokenizer", "judge_tokenizer_missing"),
-        ("swapped", "judge_digest_mismatch"),
-    ],
-)
-def test_the_judge_never_loads_what_the_contract_did_not_pin(
-    tmp_path: Path, setup: str, code: str
-) -> None:
-    digest = "0" * 64
-    if setup == "no_tokenizer":
-        digest = _checkpoint(tmp_path, tokenizer=False)
-    elif setup == "swapped":
-        _checkpoint(tmp_path)
-    judge = LayaAnswerJudge(tmp_path, weights_sha256=digest)
+def test_the_judge_never_scores_on_a_tag_the_contract_did_not_pin() -> None:
+    transport, sent = _ollama([{"yes": 0.0}], digest="b" * 64)
 
     with pytest.raises(AnswerJudgeUnavailableError) as raised:
-        asyncio.run(judge.supports("q", ["p"]))
+        asyncio.run(_judge(transport).supports("q", ["p"]))
 
-    assert raised.value.code == code
+    assert raised.value.code == "model_digest_mismatch"
+    assert sent == []

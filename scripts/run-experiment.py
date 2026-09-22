@@ -40,7 +40,7 @@ from harness import (  # noqa: E402
 )
 from harness.brave_browser import BraveEgressGuard  # noqa: E402
 from harness.config import RuntimeBackend  # noqa: E402
-from harness.corpus_judge import LayaAnswerJudge  # noqa: E402
+from harness.corpus_judge import OllamaRerankerAnswerJudge  # noqa: E402
 from harness.evals import (  # noqa: E402
     EvalService,
     ModelCaseRunner,
@@ -140,15 +140,12 @@ async def run(
         browser_guard=guard,
         embedder=embedder,
         runtime_switch=switch,
-        # O braço `laya_advisory` pede o juiz; sem checkpoint no host ele falha
-        # em vez de medir o braço sem juiz com o rótulo de com.
-        answer_judge=(
-            LayaAnswerJudge(
-                host.answer_judge_model_dir,
-                weights_sha256=config.corpus.answer_judge.weights_sha256,
-            )
-            if host is not None and host.answer_judge_model_dir is not None
-            else None
+        # O braço `judge_advisory` pede o juiz; sem a tag no Ollama ele falha pelo
+        # digest em vez de medir o braço sem juiz com o rótulo de com.
+        answer_judge=OllamaRerankerAnswerJudge(
+            base_url=OLLAMA_URL,
+            model=config.corpus.answer_judge.ollama_tag,
+            expected_digest=config.corpus.answer_judge.ollama_digest,
         ),
     )
     live = build_live_runner(config, model_runner, browser_guard=guard)

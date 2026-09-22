@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "3393c3be323e82aacbd1df56e9f716a104c750a3d097180dc9d93e72138b00fe",
+  "manifest_digest_sha256": "c101803f5e8733c9b03a41c8560b34310897bd0dc6b57925fde584f27e95e95d",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -22,7 +22,7 @@
   },
   "contract_digests": {
     "model_profiles_sha256": "54e3e3d08413b8bdf268adb4ef62988622000be1274b8ad1dc8e89a55fec49f8",
-    "harness_sha256": "0bc80fc78a1f4132bd19c75d4180466fe235a4d3de6d337b750ea56a1ce8e007",
+    "harness_sha256": "6a443252c3047ad594747d9cd6f525c672594bb896bd5a43759a9caae689030d",
     "tool_registry_sha256": "e1dbee48ce312924de041d3de7da7d3dd4b9f3e38be961df16618c5bbb53ff7c"
   },
   "primary_surface": "web",
@@ -2124,8 +2124,8 @@
       "fixed": {
         "embedding_model": "bge-m3:latest",
         "dense_similarity_floor": 0.53,
-        "judge_model": "convaiinnovations/laya multilingual",
-        "judge_device": "cpu"
+        "judge_model": "Qwen/Qwen3-Reranker-0.6B",
+        "judge_device": "gpu_via_ollama"
       },
       "arms": [
         {
@@ -2134,7 +2134,7 @@
           "answer_judge": "disabled"
         },
         {
-          "id": "laya_advisory",
+          "id": "judge_advisory",
           "corpus_granted": true,
           "answer_judge": "advisory"
         }
