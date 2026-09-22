@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "c101803f5e8733c9b03a41c8560b34310897bd0dc6b57925fde584f27e95e95d",
+  "manifest_digest_sha256": "ba3981480ad8a01f5fb76ee4106c31c1bae437c0ced8e0c060b9a5b385744985",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -2111,6 +2111,46 @@
         }
       ],
       "promotion_gate": "A Challenger replaces the functional profile only with higher complete-task success than mitos_control over the promotion protocol, zero security or taint violations, no increase in unsupported_claims, and latency the RX 7600 sustains at the 64k window. Arms whose model does not reason run with thinking off; that difference is part of the model, not a confound to remove."
+    },
+    {
+      "id": "runtime_profile_bakeoff_finalists",
+      "status": "required_before_default_change",
+      "runtime_profile": "local_mitos_ollama_reproduction",
+      "execution_route": "local_web_tools",
+      "fixture_tags": [
+        "tool_selection",
+        "tool_noop",
+        "vision",
+        "retrieval_automation",
+        "corpus_answer"
+      ],
+      "fixed": {
+        "temperature": 0.3,
+        "presence_penalty": 0,
+        "max_steps": 15,
+        "max_tool_calls_per_step": 4,
+        "max_tool_calls_per_turn": 20,
+        "context_window_tokens": 65536,
+        "embedding_model": "bge-m3:latest"
+      },
+      "arms": [
+        {
+          "id": "mitos_control",
+          "runtime_profile": "local_mitos_ollama_reproduction",
+          "thinking": true
+        },
+        {
+          "id": "agents_a1_4b",
+          "runtime_profile": "agents_a1_4b_llamacpp",
+          "thinking": true
+        },
+        {
+          "id": "gemma4_e4b_qat",
+          "runtime_profile": "gemma4_e4b_qat_ollama",
+          "thinking": true
+        }
+      ],
+      "promotion_gate": "A Challenger replaces the functional profile only with higher complete-task success than mitos_control over the promotion protocol, zero security or taint violations, no increase in unsupported_claims, and latency the RX 7600 sustains at the 64k window. Arms whose model does not reason run with thinking off; that difference is part of the model, not a confound to remove. Finalists chosen from the 2026-09-22 pilot among the Challengers that fit the RX 7600 entirely: qwen35_9b scored 14/15 but runs 2 GB of its weights on the CPU at 20 tok/s and leaves no room for bge-m3 or the answer judge."
     },
     {
       "id": "corpus_answer_judge_advisory",
