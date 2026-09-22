@@ -1,0 +1,11 @@
+# Harness 2.0 — Challenger `gemma4_e4b_qat_ollama` (bake-off de RuntimeProfiles).
+#
+# Mesmos parâmetros do Modelfile do perfil funcional: num bake-off só o modelo
+# muda. TEMPLATE, SYSTEM, renderer e parser vêm do artefato base.
+FROM gemma4:e4b-it-qat
+
+PARAMETER num_ctx 65536
+PARAMETER temperature 0.3
+PARAMETER presence_penalty 0
+PARAMETER top_k 20
+PARAMETER top_p 0.8

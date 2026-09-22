@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "b0a339e1348d5c64d449ff8b2133acd9f7ad71a1dce3dfa72ce39fe057e50c29",
+  "manifest_digest_sha256": "180e021948a4e31dbc91ad7364e60d842f03984fcd0663ced034f3ce691ffb4a",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -21,7 +21,7 @@
     "dataset_digest_sha256": "b1e6e9a3b5b534a3b2e008857d3d49af9beca513fd93eafbf83fe228e32290ff"
   },
   "contract_digests": {
-    "model_profiles_sha256": "e5e3e7ba28622469e5df05abd26df76a1f8032ccee0e5c70860013502aa3eff2",
+    "model_profiles_sha256": "54e3e3d08413b8bdf268adb4ef62988622000be1274b8ad1dc8e89a55fec49f8",
     "harness_sha256": "53bdb45ee64d1253041d26fa900a75133a1ee839300a0f7346a850227823ab75",
     "tool_registry_sha256": "e1dbee48ce312924de041d3de7da7d3dd4b9f3e38be961df16618c5bbb53ff7c"
   },
@@ -1924,6 +1924,66 @@
       ],
       "promotion_gate": "The granted arm answers more questions correctly with a citation and does not invent more than the baseline when the acervo has nothing; zero taint or grant violations.",
       "note": "Comparação entre responder sem acervo e responder com ele. Um piloto em 13/08/2026 mostrou que a comparação não era executável: `corpus_granted` era lido do stimulus da fixture e não do braço, as tags selecionavam fixtures de gate em vez de resposta, e os dois braços rodavam trabalho idêntico — divergindo 13 pontos por não determinismo e uma queda do provedor. Agora o braço decide o grant (`_corpus_granted` em `evals/model_runner.py`), as fixtures `corpus_answer` medem o que o Operator lê, e `injected_passages` entra como métrica para mostrar que os braços de fato rodaram experimentos diferentes. O embedder é o determinístico da bancada, não o `bge-m3`: o que se compara aqui é o que o modelo faz com passagem na mão contra o que ele faz sem nenhuma, e não a qualidade da recuperação — essa é do acervo real e do piso do contrato. Os braços indexam com o `bge-m3` e o piso do contrato desde 15/08/2026. Antes usavam o embedder de hash com piso 0.3, e isso media outro sistema: a pergunta sobre a porta do servidor de e-mail trazia a passagem do proxy, que o modelo esticava até responder 8899 em 8 de 8 casos. Com o embedder real, a mesma pergunta volta sem passagem (a similaridade fica abaixo de 0.53, contra 0.76 na pergunta que a passagem responde), e o que resta de invenção vem da memória do modelo, não de material que o harness entregou. Sem perna lexical: a reescrita autônoma da produção custaria uma chamada de modelo por caso, e a configuração é a mesma que a produção usa quando essa reescrita falha."
+    },
+    {
+      "id": "runtime_profile_bakeoff",
+      "status": "required_before_default_change",
+      "runtime_profile": "local_mitos_ollama_reproduction",
+      "execution_route": "local_web_tools",
+      "fixture_tags": [
+        "tool_selection",
+        "tool_noop",
+        "vision",
+        "retrieval_automation",
+        "corpus_answer"
+      ],
+      "fixed": {
+        "temperature": 0.3,
+        "presence_penalty": 0,
+        "max_steps": 15,
+        "max_tool_calls_per_step": 4,
+        "max_tool_calls_per_turn": 20,
+        "context_window_tokens": 65536,
+        "embedding_model": "bge-m3:latest"
+      },
+      "arms": [
+        {
+          "id": "mitos_control",
+          "runtime_profile": "local_mitos_ollama_reproduction",
+          "thinking": true
+        },
+        {
+          "id": "agents_a1_4b",
+          "runtime_profile": "agents_a1_4b_llamacpp",
+          "thinking": true
+        },
+        {
+          "id": "gemma4_e4b_qat",
+          "runtime_profile": "gemma4_e4b_qat_ollama",
+          "thinking": true
+        },
+        {
+          "id": "qwen35_9b",
+          "runtime_profile": "qwen35_9b_ollama",
+          "thinking": true
+        },
+        {
+          "id": "cove_4b",
+          "runtime_profile": "cove_4b_llamacpp",
+          "thinking": false
+        },
+        {
+          "id": "gemma4_e4b_toolcall",
+          "runtime_profile": "gemma4_e4b_toolcall_llamacpp",
+          "thinking": false
+        },
+        {
+          "id": "granite41_8b",
+          "runtime_profile": "granite41_8b_ollama",
+          "thinking": false
+        }
+      ],
+      "promotion_gate": "A Challenger replaces the functional profile only with higher complete-task success than mitos_control over the promotion protocol, zero security or taint violations, no increase in unsupported_claims, and latency the RX 7600 sustains at the 64k window. Arms whose model does not reason run with thinking off; that difference is part of the model, not a confound to remove."
     }
   ]
 }

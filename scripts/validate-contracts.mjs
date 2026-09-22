@@ -279,6 +279,21 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
           weights?.evidence?.sha256 === profile.installation.gguf_sha256,
         `${profile.id}: perfil llama_cpp exige installation.gguf_sha256 igual a model_weights`,
       );
+      // A janela e o template são do servidor, não do pedido: -c diferente do
+      // num_ctx corta o ModelView, e sem --jinja as tool calls voltam como texto.
+      const serverArgs = profile.installation?.server_args ?? [];
+      const contextFlag = serverArgs.indexOf("-c");
+      check(
+        Array.isArray(serverArgs) &&
+          contextFlag >= 0 &&
+          serverArgs[contextFlag + 1] === String(profile.installation?.parameters?.num_ctx) &&
+          serverArgs.includes("--jinja"),
+        `${profile.id}: server_args deve fixar -c igual a num_ctx e --jinja`,
+      );
+      check(
+        !["-m", "--model", "--host", "--port", "--alias"].some((flag) => serverArgs.includes(flag)),
+        `${profile.id}: server_args não fixa arquivo, endereço nem alias; esses vêm do host`,
+      );
     }
 
     unique((profile.components ?? []).map((component) => component.id), `${profile.id}.components`);
@@ -361,22 +376,26 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
     }
   }
 
-  if (activeProfile) {
+  // Todo perfil Ollama nasce de um Modelfile versionado: o do funcional e o de cada
+  // Challenger, com as mesmas regras — senão a tag sobe com o num_ctx padrão do
+  // Ollama e o braço é medido numa janela que o contrato nunca declarou.
+  for (const ollamaProfile of profiles.filter((profile) => profile.runtime?.backend === "ollama")) {
+    const activeProfile = ollamaProfile;
     const modelfilePath = path.join(root, activeProfile.installation.repository_modelfile);
-    check(fs.existsSync(modelfilePath), "Modelfile do RuntimeProfile ativo está ausente");
+    check(fs.existsSync(modelfilePath), `${activeProfile.id}: Modelfile ausente`);
     if (fs.existsSync(modelfilePath)) {
       const modelfile = fs.readFileSync(modelfilePath, "utf8");
       const modelfileHash = sha256(modelfile);
       check(
         activeProfile.installation.repository_modelfile_sha256 === modelfileHash,
-        "SHA-256 do Modelfile diverge da instalação declarada",
+        `${activeProfile.id}: SHA-256 do Modelfile diverge da instalação declarada`,
       );
       const modelfileComponent = activeProfile.components?.find(
         (component) => component.id === "modelfile",
       );
       check(
         modelfileComponent?.evidence?.sha256 === modelfileHash,
-        "componente modelfile diverge do arquivo atual",
+        `${activeProfile.id}: componente modelfile diverge do arquivo atual`,
       );
 
       const directives = modelfile
@@ -384,14 +403,14 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
         .map((line) => line.trim())
         .filter((line) => line && !line.startsWith("#"));
       const fromDirectives = directives.filter((line) => /^FROM\s+/i.test(line));
-      check(fromDirectives.length === 1, "Modelfile deve ter exatamente um FROM");
+      check(fromDirectives.length === 1, `${activeProfile.id}: Modelfile deve ter exatamente um FROM`);
       check(
         fromDirectives[0] === `FROM ${activeProfile.model.base_model}`,
-        "Modelfile FROM diverge do RuntimeProfile ativo",
+        `${activeProfile.id}: Modelfile FROM diverge do RuntimeProfile`,
       );
       check(
         !directives.some((line) => /^(TEMPLATE|SYSTEM|MESSAGE)\b/i.test(line)),
-        "Modelfile não deve duplicar TEMPLATE, SYSTEM ou MESSAGE",
+        `${activeProfile.id}: Modelfile não deve duplicar TEMPLATE, SYSTEM ou MESSAGE`,
       );
 
       const actualParameters = Object.fromEntries(
@@ -405,7 +424,7 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
       );
       check(
         canonicalJson(actualParameters) === canonicalJson(activeProfile.installation.parameters),
-        "parâmetros do Modelfile divergem da instalação declarada",
+        `${activeProfile.id}: parâmetros do Modelfile divergem da instalação declarada`,
       );
       for (const requestScoped of ["think", "seed", "num_predict", "stop"]) {
         check(
