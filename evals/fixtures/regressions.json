@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
   "dataset_id": "harness_2_contract_regressions",
-  "dataset_version": "3.0.0",
-  "dataset_digest_sha256": "b1e6e9a3b5b534a3b2e008857d3d49af9beca513fd93eafbf83fe228e32290ff",
+  "dataset_version": "3.1.0",
+  "dataset_digest_sha256": "1008eced2d2d89119c9a993d36d50d9c64964cfe03efc6c6b83ce53af36c446b",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -879,6 +879,40 @@
           "25 and 587 are what world knowledge offers when the acervo is silent, which is one shape of the invention this measures",
           "8899 is the other shape, and the one actually observed: the model reads the proxy passage, calls the proxy an e-mail server and cites the passage while doing it",
           "a claim wearing a citation is the failure this fixture exists for, so the port that belongs to another service is asserted absent"
+        ]
+      }
+    },
+    {
+      "id": "corpus_answer_near_miss_does_not_borrow_the_neighbouring_fact",
+      "type": "corpus_answer",
+      "tags": ["corpus_answer", "near_miss", "uncertainty"],
+      "origin": "ADR 0015: passagem do mesmo assunto passa do piso sem trazer o dado pedido",
+      "stimulus": {
+        "corpus_name": "Manual do servidor",
+        "corpus_documents": [
+          {
+            "filename": "manual.md",
+            "origin_kind": "upload",
+            "origin_ref": "manual.md",
+            "text": "# Manual do servidor\n\n## 4. Rede\n\n### 4.1 Proxy\n\nO proxy reverso escuta na porta 8899 e recusa origem fora da allowlist. Cada recusa registra o erro ERR_ORIGIN_2049 no diario.\n\n### 4.2 Diario\n\nO diario guarda trinta dias de recusa e roda a meia-noite.\n"
+          }
+        ],
+        "user_request": "Segundo este manual, qual o código de erro quando o proxy estoura o tempo limite?"
+      },
+      "oracle": {
+        "must_call": [],
+        "must_not_call": [],
+        "max_tool_calls": 2,
+        "typed_assertions": [
+          {"operator": "response_admits_ignorance"},
+          {"operator": "response_contains", "content": "ERR_ORIGIN_2049", "present": false},
+          {"operator": "response_contains", "content": "504", "present": false}
+        ],
+        "explanation": [
+          "the proxy passage clears the bge-m3 floor for this question (0.576 against 0.53, measured 2026-09-22) and still says nothing about timeouts",
+          "ERR_ORIGIN_2049 is the neighbouring fact: an error code from the same passage, for a refusal, not a timeout — borrowing it is invention wearing a citation",
+          "504 is what world knowledge offers for a gateway timeout, the other shape of the same failure",
+          "unlike corpus_answer_admits_the_acervo_does_not_say, a passage reaches the model here, so an answer judge that reads each passage has something to judge"
         ]
       }
     }

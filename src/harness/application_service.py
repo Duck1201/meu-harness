@@ -63,6 +63,7 @@ from .ports import (
     ConfirmationDecision,
     ConfirmationPreview,
     ConfirmationRequest,
+    CorpusAnswerJudge,
     EmbeddingRuntime,
     EngineReadiness,
     EventSink,
@@ -139,6 +140,7 @@ class ApplicationService:
         browser_egress_guard: BrowserEgressGuard | None = None,
         corpus_directory: str | Path | None = None,
         embedder: EmbeddingRuntime | None = None,
+        answer_judge: CorpusAnswerJudge | None = None,
     ) -> None:
         roots: list[Path] = []
         for candidate in allowed_workspace_roots:
@@ -219,6 +221,7 @@ class ApplicationService:
                 embedder=embedder,
                 counter=counter,
                 config=config.corpus,
+                judge=answer_judge if config.corpus.answer_judge.mode == "advisory" else None,
             )
             if self.corpus_library is not None and embedder is not None and counter is not None
             else None

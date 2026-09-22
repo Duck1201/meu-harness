@@ -204,6 +204,15 @@
       "translate_documents": false,
       "empty_when_nothing_clears_floor": true
     },
+    "answer_judge": {
+      "mode": "disabled",
+      "threshold": 0.5,
+      "model": "convaiinnovations/laya multilingual",
+      "revision": "1c5edc17a7acd8701df6fc341c0d179f1c62c982",
+      "weights_sha256": "9d628fd971b700382ac6f65920a86f149777b2e748e0c955fb3b19695aa8f204",
+      "device": "cpu",
+      "adr": "docs/adr/0015-corpus-answer-judge-laya.md"
+    },
     "scraper": {
       "authorized_by": "Operator",
       "requires_grant": false,

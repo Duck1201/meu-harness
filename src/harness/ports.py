@@ -285,6 +285,17 @@ class TextTokenCounter(Protocol):
     def count_text(self, text: str) -> int: ...
 
 
+class CorpusAnswerJudge(Protocol):
+    """Julga, passagem a passagem, se ela traz o fato que a pergunta pede.
+
+    Um sinal consultivo no estilo System One: probabilidade calibrada, nunca
+    texto. Quem decide a resposta continua sendo o modelo, e o harness não vira
+    árbitro de veracidade (ADR 0015).
+    """
+
+    async def supports(self, question: str, passages: Sequence[str]) -> tuple[float, ...]: ...
+
+
 class TurnRetrieval(Protocol):
     """Retrieval the harness performs before the first AgentStep.
 

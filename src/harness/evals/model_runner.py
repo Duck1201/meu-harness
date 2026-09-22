@@ -43,6 +43,7 @@ from ..local_tools import RegistryToolExecutor
 from ..ports import (
     ConfirmationDecision,
     ConfirmationRequest,
+    CorpusAnswerJudge,
     EmbeddingRuntime,
     EngineReadiness,
     ModelRuntime,
@@ -394,11 +395,13 @@ class ModelCaseRunner:
         browser_guard: BraveEgressGuard | None = None,
         embedder: EmbeddingRuntime | None = None,
         runtime_switch: RuntimeSwitch | None = None,
+        answer_judge: CorpusAnswerJudge | None = None,
     ) -> None:
         self._config = config
         self._runtime = runtime
         self._estimator = estimator
         self._runtime_switch = runtime_switch
+        self._answer_judge = answer_judge
         # Sem embedder, o acervo da fixture é montado pelo determinístico da
         # bancada, e o que chega ao modelo é a passagem que o hash sorteou. Com
         # ele, é a passagem que a produção entregaria — inclusive nenhuma.
@@ -414,6 +417,17 @@ class ModelCaseRunner:
 
     def supports(self, fixture_type: str) -> bool:
         return fixture_type in self._SUPPORTED_TYPES
+
+    def _judge_for(self, settings: Mapping[str, JsonValue]) -> CorpusAnswerJudge | None:
+        """O braço liga o juiz; sem juiz configurado, pedir um é erro, não silêncio."""
+        declared = settings.get("answer_judge", "disabled")
+        if declared == "disabled":
+            return None
+        if declared != "advisory":
+            raise ValueError(f"unknown answer_judge in arm settings: {declared!r}")
+        if self._answer_judge is None:
+            raise ValueError("arm asks for the answer judge and none is configured")
+        return self._answer_judge
 
     async def _arm_runtime(
         self, settings: Mapping[str, JsonValue]
@@ -454,6 +468,7 @@ class ModelCaseRunner:
                     base / "corpora",
                     embedder=self._embedder,
                     counter=(estimator if isinstance(estimator, TextTokenCounter) else None),
+                    judge=self._judge_for(spec.settings),
                 )
                 if "corpus_documents" in spec.fixture.stimulus
                 else None

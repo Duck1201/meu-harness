@@ -27,6 +27,7 @@ from ..domain import (
 from ..local_tools import RegistryToolExecutor
 from ..ports import (
     ConfirmationPreview,
+    CorpusAnswerJudge,
     EmbeddingRuntime,
     EngineReadiness,
     ModelMessage,
@@ -187,6 +188,7 @@ async def build_eval_corpus(
     *,
     embedder: EmbeddingRuntime | None = None,
     counter: TextTokenCounter | None = None,
+    judge: CorpusAnswerJudge | None = None,
 ) -> EvalCorpus:
     """Monta o Corpus que a fixture descreve, para quem quiser consultá-lo.
 
@@ -242,6 +244,7 @@ async def build_eval_corpus(
             embedder=embedder,
             counter=counter,
             config=config,
+            judge=judge,
         ),
         config=config,
     )

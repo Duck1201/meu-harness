@@ -109,7 +109,7 @@ Composition root em `api._default_service`, chamado por `create_app` quando nada
 | Tools | `local_tools.py`, `web_tools.py`, `composite_tools.py`, `brave_browser.py`, `page_verification.py` |
 | Estado | `conversation_store.py` (SQLite canônico), `observability_store.py` |
 | Contexto/modelo | `context_builder.py`, `system_prompt.py`, `token_estimator.py`, `ollama_runtime.py`, `llamacpp_runtime.py` (ADR 0013) |
-| Corpus | `corpus_tools.py` (executor do efeito), `corpus_service.py`, `corpus_store.py` (um SQLite por acervo), `corpus_ingestion.py`, `corpus_scraper.py`, `corpus_browser.py` (rota de browser, ADR 0014) |
+| Corpus | `corpus_tools.py` (executor do efeito), `corpus_service.py`, `corpus_store.py` (um SQLite por acervo), `corpus_ingestion.py`, `corpus_scraper.py`, `corpus_browser.py` (rota de browser, ADR 0014), `corpus_judge.py` (juiz Laya consultivo, ADR 0015) |
 | Config | `config.py` (contratos JSON), `host_config.py` (HostConfig do host) |
 | Evals | `evals/` (runner, service, model_runner, runtime_switch, oracles, statistics, store, bench, loader, lease, models, language) |
 

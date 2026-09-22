@@ -108,11 +108,22 @@ class CorpusEmbeddingConfig(ConfigModel):
     batch_size: int
 
 
+class CorpusAnswerJudgeConfig(ConfigModel):
+    # `advisory` anota cada passagem com a probabilidade de trazer o fato pedido;
+    # nasce `disabled` até o experimento medir que ajuda (ADR 0015).
+    mode: Literal["disabled", "advisory"] = "disabled"
+    threshold: float = 0.5
+    model: str = ""
+    revision: str = ""
+    weights_sha256: str = ""
+
+
 class CorpusConfig(ConfigModel):
     embedding: CorpusEmbeddingConfig
     ingestion: CorpusIngestionConfig
     retrieval: CorpusRetrievalConfig
     scraper: CorpusScraperConfig
+    answer_judge: CorpusAnswerJudgeConfig = CorpusAnswerJudgeConfig()
 
 
 class ModelIdentityConfig(ConfigModel):

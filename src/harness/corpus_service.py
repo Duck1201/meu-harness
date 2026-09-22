@@ -36,7 +36,7 @@ from .corpus_store import (
     valid_corpus_id,
 )
 from .domain import UNTRUSTED_WEB_TAINT, Corpus, JsonValue, RetrievedChunk
-from .ports import EmbeddingRuntime, TextTokenCounter
+from .ports import CorpusAnswerJudge, EmbeddingRuntime, TextTokenCounter
 from .web_tools import EgressPolicyError
 
 # O que o modelo lê junto das passagens. Fica aqui e não no system prompt porque
@@ -58,6 +58,14 @@ NOTHING_FOUND_INSTRUCTION = (
 )
 
 
+UNSUPPORTED_INSTRUCTION = (
+    "An automatic check read each passage below against this request and found "
+    "none that states what was asked. The check can be wrong, so read them "
+    "yourself; but if you agree, tell the Operator plainly that the Corpus does "
+    "not say it, and do not answer from memory as if it did."
+)
+
+
 class CorpusLibraryError(Exception):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -73,29 +81,47 @@ class Retrieval:
     query: str
     lexical_query: str | None
     chunks: tuple[RetrievedChunk, ...]
+    # Probabilidade, por passagem, de ela trazer o fato pedido. Ausente quando o
+    # juiz está desligado — não é zero, é "ninguém julgou".
+    coverage: tuple[float, ...] | None = None
+    coverage_threshold: float = 0.5
 
     @property
     def taints(self) -> tuple[str, ...]:
         found = {taint for chunk in self.chunks for taint in chunk.taints}
         return tuple(sorted(found))
 
+    @property
+    def judged_unsupported(self) -> bool:
+        """O juiz leu toda passagem e nenhuma passou do limiar."""
+        return (
+            self.coverage is not None
+            and bool(self.chunks)
+            and all(value < self.coverage_threshold for value in self.coverage)
+        )
+
     def payload(self) -> JsonValue:
-        return {
-            "corpus": self.corpus_name,
-            "instruction": CITATION_INSTRUCTION if self.chunks else NOTHING_FOUND_INSTRUCTION,
-            "passages": [
-                {
-                    "marker": index,
-                    "document": chunk.document_title,
-                    "location": chunk.location,
-                    "origin": chunk.origin_kind,
-                    "source": chunk.origin_ref,
-                    "untrusted": UNTRUSTED_WEB_TAINT in chunk.taints,
-                    "text": chunk.text,
-                }
-                for index, chunk in enumerate(self.chunks, start=1)
-            ],
-        }
+        if not self.chunks:
+            instruction = NOTHING_FOUND_INSTRUCTION
+        elif self.judged_unsupported:
+            instruction = UNSUPPORTED_INSTRUCTION
+        else:
+            instruction = CITATION_INSTRUCTION
+        passages: list[JsonValue] = []
+        for index, chunk in enumerate(self.chunks, start=1):
+            passage: dict[str, JsonValue] = {
+                "marker": index,
+                "document": chunk.document_title,
+                "location": chunk.location,
+                "origin": chunk.origin_kind,
+                "source": chunk.origin_ref,
+                "untrusted": UNTRUSTED_WEB_TAINT in chunk.taints,
+                "text": chunk.text,
+            }
+            if self.coverage is not None:
+                passage["answers_the_request"] = round(self.coverage[index - 1], 2)
+            passages.append(passage)
+        return {"corpus": self.corpus_name, "instruction": instruction, "passages": passages}
 
 
 class CorpusLibrary:
@@ -206,11 +232,13 @@ class CorpusRetriever:
         embedder: EmbeddingRuntime,
         counter: TextTokenCounter,
         config: CorpusConfig,
+        judge: CorpusAnswerJudge | None = None,
     ) -> None:
         self._library = library
         self._embedder = embedder
         self._counter = counter
         self._config = config
+        self._judge = judge
 
     async def retrieve(
         self,
@@ -232,13 +260,28 @@ class CorpusRetriever:
             rank_constant=settings.reciprocal_rank_constant,
             similarity_floor=settings.dense_similarity_floor,
         )
+        kept = self._within_budget(chunks)
         return Retrieval(
             corpus_id=corpus_id,
             corpus_name=corpus.name,
             query=question,
             lexical_query=lexical_query,
-            chunks=self._within_budget(chunks),
+            chunks=kept,
+            coverage=await self._coverage(question, kept),
+            coverage_threshold=self._config.answer_judge.threshold,
         )
+
+    async def _coverage(
+        self, question: str, chunks: Sequence[RetrievedChunk]
+    ) -> tuple[float, ...] | None:
+        """O juiz é consultivo: falhar nele devolve a recuperação sem anotação."""
+        if self._judge is None or not chunks:
+            return None
+        try:
+            coverage = await self._judge.supports(question, [chunk.text for chunk in chunks])
+        except Exception:
+            return None
+        return coverage if len(coverage) == len(chunks) else None
 
     def _within_budget(self, chunks: Sequence[RetrievedChunk]) -> tuple[RetrievedChunk, ...]:
         """Cuts from the bottom of the ranking, never from the middle of a passage.
@@ -556,6 +599,7 @@ class CorpusIngestionService:
 __all__ = [
     "CITATION_INSTRUCTION",
     "NOTHING_FOUND_INSTRUCTION",
+    "UNSUPPORTED_INSTRUCTION",
     "CorpusIngestionService",
     "CorpusLibrary",
     "CorpusLibraryError",

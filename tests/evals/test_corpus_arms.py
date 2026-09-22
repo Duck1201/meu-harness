@@ -9,6 +9,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
+import pytest
+
 from harness import TerminalOutcomeKind, ToolCall, ToolResult, ToolResultStatus, load_config
 from harness.evals import (
     EvalCaseSpec,
@@ -247,3 +249,46 @@ def test_no_retrieval_at_all_is_not_an_acervo_that_answered_nothing() -> None:
 
     assert never_ran.verdict is TaskVerdict.INCONCLUSIVE
     assert answered_nothing.verdict is TaskVerdict.FAIL
+
+
+class _LowJudge:
+    """Diz que nenhuma passagem responde, e registra que foi consultado."""
+
+    def __init__(self) -> None:
+        self.questions: list[str] = []
+
+    async def supports(self, question: str, passages: Sequence[str]) -> tuple[float, ...]:
+        self.questions.append(question)
+        return tuple(0.1 for _ in passages)
+
+
+def test_the_judge_arm_reaches_the_model_and_the_plain_arm_does_not() -> None:
+    fixture = _fixtures()["corpus_answer_carries_the_code_the_acervo_holds"]
+    judge = _LowJudge()
+
+    def run(**settings: object) -> _AnswerRuntime:
+        runtime = _AnswerRuntime("O acervo não diz.")
+        runner = ModelCaseRunner(
+            config=load_config(),
+            runtime=runtime,
+            estimator=_FlatEstimator(),
+            operator_notes="",
+            answer_judge=judge,
+        )
+        asyncio.run(runner.run_case(_spec(fixture, **settings)))
+        return runtime
+
+    judged = run(corpus_granted=True, answer_judge="advisory")
+    plain = run(corpus_granted=True, answer_judge="disabled")
+
+    assert judge.questions
+    assert "answers_the_request" in judged.prompts[0]
+    assert "An automatic check read each passage" in judged.prompts[0]
+    assert "answers_the_request" not in plain.prompts[0]
+
+
+def test_asking_for_a_judge_that_is_not_there_is_an_error() -> None:
+    fixture = _fixtures()["corpus_answer_carries_the_code_the_acervo_holds"]
+
+    with pytest.raises(ValueError, match="answer judge"):
+        _run(fixture, answer="x", corpus_granted=True, answer_judge="advisory")

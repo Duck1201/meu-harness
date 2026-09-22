@@ -397,6 +397,26 @@ desligados até o experimento de ingestão medir o ganho
   uv sync --extra browser
   uv run scrapling install     # baixa o Chromium do Scrapling
   ```
+- `answer_judge.mode: "advisory"` liga um juiz local no molde do Jev
+  ([ADR-0015](docs/adr/0015-corpus-answer-judge-laya.md)): o
+  [Laya](https://github.com/NandhaKishorM/laya) lê cada passagem recuperada e
+  anota a probabilidade de ela trazer o que foi perguntado; se nenhuma trouxer,
+  o modelo é avisado de que o acervo provavelmente não responde. Ele nunca
+  bloqueia nem reescreve a resposta. Roda em CPU, só a partir de um checkpoint
+  local conferido por digest:
+
+  ```bash
+  uv sync --extra judge        # laya + torch de CPU
+  REV=1c5edc17a7acd8701df6fc341c0d179f1c62c982
+  D=~/.local/share/harness-2/laya/$REV/multilingual
+  for f in encoder/config.json model.safetensors rl_agent_config.json \
+           tokenizer/tokenizer.json tokenizer/tokenizer_config.json; do
+    mkdir -p "$D/$(dirname $f)"
+    curl -fL -o "$D/$f" "https://huggingface.co/convaiinnovations/laya/resolve/$REV/multilingual/$f"
+  done
+  ```
+
+  e declare `"answer_judge_model_dir": "<esse diretório>"` no `host.json`.
 
 ## Desenvolvimento
 

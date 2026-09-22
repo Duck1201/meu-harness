@@ -21,6 +21,7 @@ from .application_service import ApplicationRuntime, ApplicationService, Applica
 from .auth import AuthenticationError, SessionController, hash_password, verify_password
 from .config import HarnessConfig, RuntimeBackend, load_config
 from .conversation_store import ConversationStore, NotFoundError
+from .corpus_judge import LayaAnswerJudge
 from .corpus_service import IngestionJob
 from .domain import (
     CanonicalHistoryEntry,
@@ -948,6 +949,19 @@ def _default_service(
         operator_notes=load_operator_notes(),
         corpus_directory=state_dir / "corpora",
         embedder=embedder,
+        answer_judge=_answer_judge(config, host_config),
+    )
+
+
+def _answer_judge(config: HarnessConfig, host_config: HostConfig | None) -> LayaAnswerJudge | None:
+    """O juiz só existe ligado no contrato e instalado no host; faltando um, não há juiz."""
+    settings = config.corpus.answer_judge
+    if settings.mode != "advisory" or host_config is None:
+        return None
+    if host_config.answer_judge_model_dir is None:
+        return None
+    return LayaAnswerJudge(
+        host_config.answer_judge_model_dir, weights_sha256=settings.weights_sha256
     )
 
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "e1f65d5d7e4cbd5042528f7badffb34e23e8bfd87f694ea416afcae55f99ea93",
+  "manifest_digest_sha256": "3393c3be323e82aacbd1df56e9f716a104c750a3d097180dc9d93e72138b00fe",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -17,12 +17,12 @@
   "dataset": {
     "path": "evals/fixtures/regressions.json",
     "dataset_id": "harness_2_contract_regressions",
-    "dataset_version": "3.0.0",
-    "dataset_digest_sha256": "b1e6e9a3b5b534a3b2e008857d3d49af9beca513fd93eafbf83fe228e32290ff"
+    "dataset_version": "3.1.0",
+    "dataset_digest_sha256": "1008eced2d2d89119c9a993d36d50d9c64964cfe03efc6c6b83ce53af36c446b"
   },
   "contract_digests": {
     "model_profiles_sha256": "54e3e3d08413b8bdf268adb4ef62988622000be1274b8ad1dc8e89a55fec49f8",
-    "harness_sha256": "f51dbcaab2369e7d07808d8ca4fbe145cef1b0006d245afe20137e3b4468cab1",
+    "harness_sha256": "0bc80fc78a1f4132bd19c75d4180466fe235a4d3de6d337b750ea56a1ce8e007",
     "tool_registry_sha256": "e1dbee48ce312924de041d3de7da7d3dd4b9f3e38be961df16618c5bbb53ff7c"
   },
   "primary_surface": "web",
@@ -1984,6 +1984,35 @@
         }
       ],
       "promotion_gate": "A Challenger replaces the functional profile only with higher complete-task success than mitos_control over the promotion protocol, zero security or taint violations, no increase in unsupported_claims, and latency the RX 7600 sustains at the 64k window. Arms whose model does not reason run with thinking off; that difference is part of the model, not a confound to remove."
+    },
+    {
+      "id": "corpus_answer_judge_advisory",
+      "status": "required_before_default_enablement",
+      "runtime_profile": "local_mitos_ollama_reproduction",
+      "execution_route": "local_web_tools",
+      "fixture_tags": [
+        "corpus_answer",
+        "retrieval_automation"
+      ],
+      "fixed": {
+        "embedding_model": "bge-m3:latest",
+        "dense_similarity_floor": 0.53,
+        "judge_model": "convaiinnovations/laya multilingual",
+        "judge_device": "cpu"
+      },
+      "arms": [
+        {
+          "id": "no_judge",
+          "corpus_granted": true,
+          "answer_judge": "disabled"
+        },
+        {
+          "id": "laya_advisory",
+          "corpus_granted": true,
+          "answer_judge": "advisory"
+        }
+      ],
+      "promotion_gate": "Advisory mode is enabled only with fewer unsupported_claims than no_judge, no drop in task success on the fixtures whose passage does answer, and zero security or taint violations. The judge never blocks or rewrites an answer; it only annotates passages."
     }
   ]
 }
