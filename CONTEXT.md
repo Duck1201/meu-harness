@@ -50,6 +50,10 @@ _Avoid_: Memory, compressed history, canonical context
 A identidade reproduzível de uma combinação de modelo, runtime, componentes embutidos, plataforma e capacidades observadas.
 _Avoid_: Backend, model config, route
 
+**Challenger**:
+Um RuntimeProfile instalado e medido que nenhuma ExecutionRoute de produção seleciona; só entra em execução como braço de experimento e só vira o perfil funcional por promoção.
+_Avoid_: Candidate model, backup profile, alternative route
+
 **ExecutionRoute**:
 A política de execução que seleciona um RuntimeProfile e fixa limites, amostragem, tools e tratamento de raciocínio para um tipo de trabalho.
 _Avoid_: RuntimeProfile, backend, endpoint

@@ -212,12 +212,42 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
   );
   const functionalProfiles = profiles.filter((profile) => profile.status === "functional");
 
+  const runtimeBackends = new Set(["ollama", "llama_cpp"]);
   check(Boolean(activeProfile), "active_runtime_profile não referencia um RuntimeProfile");
   check(functionalProfiles.length === 1, "deve existir exatamente um RuntimeProfile funcional");
   check(
-    functionalProfiles[0]?.id === activeProfile?.id && activeProfile?.runtime?.backend === "ollama",
-    "o único RuntimeProfile funcional deve ser o perfil Ollama ativo",
+    functionalProfiles[0]?.id === activeProfile?.id,
+    "o único RuntimeProfile funcional deve ser o perfil ativo",
   );
+  // Challenger é candidato de bancada: tem artefato instalado e digest medido, mas
+  // nenhuma rota de produção o seleciona e ele não entra em release sem promoção.
+  for (const profile of profiles) {
+    check(
+      ["functional", "challenger"].includes(profile.status),
+      `${profile.id}: status deve ser functional ou challenger`,
+    );
+    check(
+      profile.status !== "challenger" || profile.release_eligible === false,
+      `${profile.id}: challenger não é elegível para release`,
+    );
+    check(
+      runtimeBackends.has(profile.runtime?.backend),
+      `${profile.id}: runtime.backend deve ser ollama ou llama_cpp`,
+    );
+    for (const field of ["tool_markup_leak_markers", "reasoning_leak_markers"]) {
+      if (!Object.hasOwn(profile, field)) continue;
+      check(
+        Array.isArray(profile[field]) &&
+          profile[field].every((marker) => typeof marker === "string" && marker.length > 0),
+        `${profile.id}.${field}: deve ser lista de marcadores não vazios`,
+      );
+    }
+    const numCtx = Number(profile.installation?.parameters?.num_ctx);
+    check(
+      Number.isInteger(numCtx) && numCtx > 0,
+      `${profile.id}: installation.parameters.num_ctx ausente`,
+    );
+  }
   check(
     harness.default_runtime_profile === profilesDocument.active_runtime_profile,
     "harness.default_runtime_profile diverge do perfil ativo",
@@ -232,10 +262,24 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
       profile.installation?.installed_profile_digest_sha256 === profile.profile_digest_sha256,
       `${profile.id}: instalação e RuntimeProfile usam digests diferentes`,
     );
-    check(
-      profile.installation?.matches_repository_modelfile === true,
-      `${profile.id}: instalação funcional deve estar coerente com o Modelfile`,
-    );
+    if (profile.runtime?.backend === "ollama") {
+      check(
+        profile.installation?.matches_repository_modelfile === true,
+        `${profile.id}: instalação Ollama deve estar coerente com o Modelfile`,
+      );
+    }
+    // O llama-server carrega o arquivo, não uma tag: o digest que prova o modelo é
+    // o do GGUF em disco, e é ele que o runtime confere antes do primeiro Turn.
+    if (profile.runtime?.backend === "llama_cpp") {
+      const weights = (profile.components ?? []).find(
+        (component) => component.id === "model_weights",
+      );
+      check(
+        shaPattern.test(profile.installation?.gguf_sha256 ?? "") &&
+          weights?.evidence?.sha256 === profile.installation.gguf_sha256,
+        `${profile.id}: perfil llama_cpp exige installation.gguf_sha256 igual a model_weights`,
+      );
+    }
 
     unique((profile.components ?? []).map((component) => component.id), `${profile.id}.components`);
     for (const component of profile.components ?? []) {
@@ -394,6 +438,14 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
       activeProfile?.capabilities?.structured_tool_calls?.gate_status === "passed",
     "ExecutionRoute com tools exige structured_tool_calls suportado e aprovado",
   );
+  for (const route of routes) {
+    const routeProfile = profiles.find((profile) => profile.id === route.runtime_profile);
+    check(
+      harness.context?.initial_budget_tokens <=
+        Number(routeProfile?.installation?.parameters?.num_ctx),
+      `${route.id}: context.initial_budget_tokens excede o num_ctx do RuntimeProfile`,
+    );
+  }
   check(
     !defaultRoute?.sampling?.thinking ||
       (activeProfile?.capabilities?.reasoning?.support === "supported" &&
@@ -794,6 +846,25 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
       route?.runtime_profile === experiment.runtime_profile,
       `${experiment.id}: ExecutionRoute seleciona outro RuntimeProfile`,
     );
+    // Um braço de bake-off troca só o modelo; o perfil que ele pede tem de existir
+    // e declarar suporte a tool calls, senão o braço mede a recusa do runtime.
+    for (const arm of experiment.arms ?? []) {
+      if (!Object.hasOwn(arm, "runtime_profile")) continue;
+      const armProfile = profiles.find((profile) => profile.id === arm.runtime_profile);
+      check(
+        Boolean(armProfile),
+        `${experiment.id}.${arm.id}: RuntimeProfile inexistente: ${arm.runtime_profile}`,
+      );
+      check(
+        armProfile?.capabilities?.structured_tool_calls?.support !== "unsupported",
+        `${experiment.id}.${arm.id}: perfil sem structured_tool_calls`,
+      );
+      check(
+        !(arm.thinking ?? experiment.fixed?.thinking) ||
+          armProfile?.capabilities?.reasoning?.support === "supported",
+        `${experiment.id}.${arm.id}: thinking pedido para perfil sem reasoning`,
+      );
+    }
     for (const tag of experiment.fixture_tags ?? []) {
       check(fixtureTags.has(tag), `${experiment.id}: tag de fixture inexistente: ${tag}`);
     }
@@ -840,6 +911,7 @@ const canonicalTerms = [
   "CanonicalHistory",
   "ModelView",
   "RuntimeProfile",
+  "Challenger",
   "ExecutionRoute",
   "TerminalOutcome",
   "TaskVerdict",

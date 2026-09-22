@@ -17,6 +17,7 @@ from .model_runner import (
     BrowserBenchCaseRunner,
     CompositeCaseRunner,
     ModelCaseRunner,
+    RuntimeSwitch,
     build_live_runner,
 )
 from .models import (
@@ -128,6 +129,7 @@ __all__ = [
     "ResultErrorCodeIs",
     "ResultProducerIs",
     "ResultStatusIs",
+    "RuntimeSwitch",
     "TaskVerdict",
     "TerminalOutcomeIs",
     "ToolCalled",

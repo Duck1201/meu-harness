@@ -253,3 +253,40 @@ def test_ollama_profile_verification_uses_tags_digest() -> None:
         assert verification.observed_digest == "abc123"
 
     asyncio.run(scenario())
+
+
+def test_unload_asks_ollama_to_drop_the_model_now() -> None:
+    async def scenario() -> None:
+        seen: list[tuple[str, dict[str, object] | None]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content) if request.content else None
+            seen.append((request.url.path, body))
+            if request.url.path == "/api/ps":
+                return httpx.Response(
+                    200,
+                    json={
+                        "models": [
+                            {"name": "mitos:latest", "model": "mitos:latest", "digest": "a" * 64},
+                            {"name": "bge-m3:latest", "model": "bge-m3:latest", "digest": "b" * 64},
+                        ]
+                    },
+                )
+            return httpx.Response(200, json={"done": True})
+
+        async with OllamaRuntime(
+            base_url="http://ollama",
+            model="mitos:latest",
+            expected_digest="a" * 64,
+            transport=httpx.MockTransport(handler),
+        ) as runtime:
+            assert await runtime.loaded_models() == ("mitos:latest", "bge-m3:latest")
+            await runtime.unload()
+            await runtime.unload("bge-m3:latest")
+
+        assert seen[1:] == [
+            ("/api/generate", {"model": "mitos:latest", "keep_alive": 0}),
+            ("/api/generate", {"model": "bge-m3:latest", "keep_alive": 0}),
+        ]
+
+    asyncio.run(scenario())

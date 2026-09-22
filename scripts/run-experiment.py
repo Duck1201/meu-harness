@@ -7,13 +7,18 @@ drives the same EvalService the web surface drives, with the same protocol —
 
     uv run python scripts/run-experiment.py guarded_web_brave_escalation --phase pilot
     uv run python scripts/run-experiment.py --tier model_smoke
+    uv run python scripts/run-experiment.py --tier model_smoke --profile <runtime_profile_id>
+    uv run python scripts/run-experiment.py runtime_profile_bakeoff --phase pilot
+
+A braço que declara `runtime_profile` roda naquele perfil: o switch descarrega o
+modelo anterior, sobe o do braço e mede o orçamento com o tokenizer dele, lido de
+`--tokenizer-dir/<profile_id>.json`.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import hashlib
 import json
 import sys
 import tempfile
@@ -29,42 +34,25 @@ from harness import (  # noqa: E402
     EvalRunStatus,
     EvalStore,
     EvalTier,
-    HuggingFaceTokenEstimator,
-    ModelMessage,
-    ModelRequest,
-    ModelRole,
     OllamaEmbeddingRuntime,
-    OllamaRuntime,
     load_config,
 )
 from harness.brave_browser import BraveEgressGuard  # noqa: E402
+from harness.config import RuntimeBackend  # noqa: E402
 from harness.evals import (  # noqa: E402
     EvalService,
     ModelCaseRunner,
     build_live_runner,
     load_eval_catalog,
 )
+from harness.evals.runtime_switch import (  # noqa: E402
+    OllamaLauncher,
+    ProfileRuntimeSwitch,
+    RuntimeSwitchError,
+)
 from harness.system_prompt import load_operator_notes  # noqa: E402
 
-
-async def _warm_up(runtime: OllamaRuntime) -> None:
-    """One throwaway generation before the battery starts.
-
-    The seed is honoured — the same prompt at the same seed repeats exactly — but
-    the first generation after the model loads does not match the ones that
-    follow. Without this, whichever case happens to run first is measured under
-    conditions no other case sees.
-    """
-    await runtime.generate(
-        ModelRequest(
-            messages=(ModelMessage(role=ModelRole.USER, content="ok"),),
-            tools=(),
-            options={},
-            seed=0,
-            max_output_tokens=8,
-            think=False,
-        )
-    )
+OLLAMA_URL = "http://127.0.0.1:11434"
 
 
 async def run(
@@ -72,44 +60,51 @@ async def run(
     phase: EvalPhase,
     tier: EvalTier,
     tokenizer: Path,
+    tokenizer_dir: Path,
+    profile: str | None,
     database: Path,
 ) -> int:
-    config = load_config()
+    route_config = load_config()
+    config = route_config.for_runtime_profile(profile) if profile is not None else route_config
     catalog = load_eval_catalog(
         ROOT / "evals/fixtures/regressions.json",
         ROOT / "evals/experiments.json",
         contract_root=ROOT,
     )
-    runtime = OllamaRuntime(
-        base_url="http://127.0.0.1:11434",
-        model=config.runtime_profile.model.id,
-        expected_digest=config.runtime_profile.profile_digest_sha256,
-        timeout=config.loop.model_generation_timeout_seconds,
+    # O embedding indexa o acervo das fixtures e é o mesmo em todo braço: um
+    # bake-off compara o modelo de chat diante das mesmas passagens.
+    embedding = route_config.runtime_profile.embedding
+    switch = ProfileRuntimeSwitch(
+        launchers={
+            RuntimeBackend.OLLAMA: OllamaLauncher(
+                base_url=OLLAMA_URL,
+                timeout=config.loop.model_generation_timeout_seconds,
+                keep_loaded=frozenset({embedding.id} if embedding is not None else ()),
+            ),
+        },
+        tokenizer_dir=tokenizer_dir,
+        tokenizer_overrides={route_config.runtime_profile.id: tokenizer},
     )
-    verification = await runtime.verify_profile()
-    if not verification.ready:
-        print(f"RuntimeProfile is not ready: {verification.reason_code}", file=sys.stderr)
+    try:
+        runtime, estimator = await switch.activate(config.runtime_profile)
+    except RuntimeSwitchError as error:
+        print(f"RuntimeProfile is not ready: {error}", file=sys.stderr)
         return 2
-    await _warm_up(runtime)
     browser = await BraveEgressGuard().readiness()
     if not browser.ready:
         print(f"Browser is not ready: {browser.reason_code}", file=sys.stderr)
+        await switch.release()
         return 2
 
-    estimator = HuggingFaceTokenEstimator(
-        tokenizer,
-        expected_sha256=hashlib.sha256(tokenizer.read_bytes()).hexdigest(),
-    )
     guard = BraveEgressGuard()
     # O acervo das fixtures é indexado pelo mesmo embedding da produção, então o
     # que chega ao modelo é a passagem que o piso do contrato deixaria passar —
     # inclusive nenhuma. Com o embedder determinístico, uma pergunta fora do
     # assunto ainda traz passagem, e o experimento mediria o modelo diante de
     # material que a produção nunca entregaria.
-    embedding = config.runtime_profile.embedding
     embedder = (
         OllamaEmbeddingRuntime(
-            base_url="http://127.0.0.1:11434",
+            base_url=OLLAMA_URL,
             model=embedding.id,
             expected_digest=embedding.digest_sha256,
             dimensions=embedding.dimensions,
@@ -125,6 +120,7 @@ async def run(
         runtime_readiness=EngineReadiness(ready=True),
         browser_guard=guard,
         embedder=embedder,
+        runtime_switch=switch,
     )
     live = build_live_runner(config, model_runner, browser_guard=guard)
     service = EvalService(
@@ -150,6 +146,7 @@ async def run(
             f"operator_prompt_digest={model_runner.operator_prompt_digest}",
             file=sys.stderr,
         )
+        print(f"runtime_profile_id={config.runtime_profile.id}", file=sys.stderr)
         await service.start(run.id)
         while True:
             current = await service.status(run.id)
@@ -163,10 +160,14 @@ async def run(
             await asyncio.sleep(1)
         report = await service.report(run.id)
         print(json.dumps(report.payload, indent=2, ensure_ascii=False, sort_keys=True))
+        # O tokenizer de cada perfil é arquivo do host, não do repositório; o
+        # digest dele entra no congelamento do resultado ao lado do perfil.
+        for profile_id, digest in sorted(switch.tokenizer_digests.items()):
+            print(f"tokenizer_digest[{profile_id}]={digest}", file=sys.stderr)
         return 0 if current.status is EvalRunStatus.COMPLETED else 1
     finally:
         await service.shutdown()
-        await runtime.aclose()
+        await switch.release()
         if embedder is not None:
             await embedder.aclose()
 
@@ -190,7 +191,18 @@ def main() -> int:
         "--tokenizer",
         type=Path,
         default=ROOT / ".harness/tokenizer.json",
-        help="HuggingFace tokenizer.json used for the context budget",
+        help="tokenizer.json of the route's RuntimeProfile, used for the context budget",
+    )
+    parser.add_argument(
+        "--tokenizer-dir",
+        type=Path,
+        default=ROOT / ".harness/tokenizers",
+        help="one <runtime_profile_id>.json per bake-off profile",
+    )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="run every arm on this RuntimeProfile instead of the route's",
     )
     parser.add_argument(
         "--database",
@@ -209,6 +221,8 @@ def main() -> int:
                 EvalPhase(arguments.phase),
                 EvalTier(arguments.tier),
                 arguments.tokenizer,
+                arguments.tokenizer_dir,
+                arguments.profile,
                 arguments.database,
             )
         )
@@ -219,6 +233,8 @@ def main() -> int:
                 EvalPhase(arguments.phase),
                 EvalTier(arguments.tier),
                 arguments.tokenizer,
+                arguments.tokenizer_dir,
+                arguments.profile,
                 Path(temporary) / "evals.sqlite3",
             )
         )

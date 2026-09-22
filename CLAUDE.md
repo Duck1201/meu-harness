@@ -15,6 +15,7 @@ node scripts/validate-contracts.mjs            # coerência docs <-> contratos J
 node scripts/validate-contracts.mjs --write    # resela digests derivados
 uv run python scripts/seal-system-prompt.py    # resela o espelho de SYSTEM-PROMPT.md
 cd web && pnpm test && pnpm exec tsc -b && pnpm build
+uv run python scripts/run-experiment.py --tier model_smoke --profile <id>  # bancada num Challenger
 harness                                        # sobe o servidor (uvicorn)
 harness --setup --port 8899                    # reabre o setup em outra porta
 scripts/searxng.sh                             # sobe/configura o SearXNG opcional
@@ -109,7 +110,7 @@ Composition root em `api._default_service`, chamado por `create_app` quando nada
 | Contexto/modelo | `context_builder.py`, `system_prompt.py`, `token_estimator.py`, `ollama_runtime.py` |
 | Corpus | `corpus_tools.py` (executor do efeito), `corpus_service.py`, `corpus_store.py` (um SQLite por acervo), `corpus_ingestion.py`, `corpus_scraper.py` |
 | Config | `config.py` (contratos JSON), `host_config.py` (HostConfig do host) |
-| Evals | `evals/` (runner, service, model_runner, oracles, statistics, store, bench, loader, lease, models, language) |
+| Evals | `evals/` (runner, service, model_runner, runtime_switch, oracles, statistics, store, bench, loader, lease, models, language) |
 
 Fluxo de um Turn: `PendingRequest` -> `AgentEngine` itera AgentSteps ->
 `ModelView` reconstruída por `context_builder` a cada passo -> `ollama_runtime`

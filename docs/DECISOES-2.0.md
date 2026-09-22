@@ -32,13 +32,14 @@ O vocabulário canônico está em [`CONTEXT.md`](../CONTEXT.md). Em particular:
 | Área | Decisão vigente |
 |---|---|
 | Runtime | Ollama local é o único runtime funcional; vLLM e remoto são candidatos sem rota ativa |
+| Challengers | Um RuntimeProfile pode existir com `status: challenger`: instalado, com digest medido e `release_eligible: false`. Nenhuma ExecutionRoute de produção o seleciona; só o braço de experimento que o nomeia em `runtime_profile`, e o braço troca o modelo e nada mais. Continua havendo exatamente um perfil `functional`, e um challenger só o substitui pelo protocolo de promoção |
 | Perfil ativo | `local_mitos_ollama_reproduction`, digest `a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74` |
 | Instalação | O perfil instalado foi recriado e está coerente com o `Modelfile` de SHA-256 `8f7f9e8e9b6d16539242c3e52ef37adfc3f0d0e00b7ac8a9a533c3c5f4deec7b` |
 | Componentes | Digest próprio ou evidência discriminada de componente embutido; ausência nunca é convertida em hash inventado |
 | Tokenizer do estimador | `HuggingFaceTokenEstimator` lê um `tokenizer.json` local ao host, fixado por `host.json#tokenizer_digest` e registrado como componente `token_estimator_tokenizer_file`. Vocabulário e merges são idênticos aos do repositório upstream; os sete tokens de áudio/TTS a mais lá não ocorrem em texto, então a contagem é equivalente e os digests não. Como o arquivo não é versionado, esse digest é registro de procedência, não gate de CI |
 | Capacidades | Cada capacidade declara `support`, `evidence` e `gate_status`; declaração de runtime não equivale a gate aprovado |
 | Plataforma | Python 3.13, Linux x86_64 |
-| ExecutionRoute | `local_web_tools`, web-first, sampling local `temperature=0.3`, `presence_penalty=0`, `think=true` |
+| ExecutionRoute | `local_web_tools`, web-first, sampling local `temperature=0.3`, `presence_penalty=0`, `think=true`. `sampling.thinking` é o que chega ao runtime em cada AgentStep, e só vale `true` com a capacidade `reasoning` suportada e aprovada no perfil |
 | Loop | 15 AgentSteps, até 4 calls por AgentStep, 20 calls por Turn, 40 calls de leitura por Turn, 15 minutos de Turn, 300 segundos por geração do modelo, 2 tentativas malformadas e 8.192 tokens de saída |
 | Execução de calls | Tool loop sem streaming; calls de um mesmo AgentStep são executadas em ordem, sem paralelismo |
 | Último passo | Nenhuma tool é oferecida e o TerminalOutcome é persistido uma única vez |

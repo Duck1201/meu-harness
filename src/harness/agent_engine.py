@@ -3,8 +3,10 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
-from typing import cast
+from dataclasses import dataclass
+from typing import Self, cast
 
+from .config import QWEN_REASONING_MARKUP, QWEN_TOOL_MARKUP, RuntimeProfileConfig
 from .context_builder import (
     MODEL_VIEW_ROOTS,
     ContextBudgetExceeded,
@@ -50,6 +52,44 @@ from .ports import (
     TurnRetrieval,
 )
 
+# The runtime also emits tool calls as markup, not only as JSON. A leaked payload
+# starts or ends on one of these tags.
+#
+# The ModelView's own envelope belongs here too. The model reads that markup in
+# every step and does echo it back: asked to fetch a page it once answered with
+# `<model_attempt><content><null/></content><tool_calls>…`, which is the harness
+# describing an attempt, not the model answering. Persisted as a final response,
+# that markup reaches the Operator as the answer.
+#
+# The template's own tags change with the model family and come from the
+# RuntimeProfile; the envelope is the harness's and is always checked.
+_MODEL_VIEW_TAGS = (
+    *(f"<{root}>" for root in MODEL_VIEW_ROOTS),
+    *(f"</{root}>" for root in MODEL_VIEW_ROOTS),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ResponseMarkup:
+    """The template markup a final body must not contain, per model family.
+
+    Reasoning is transient by contract and never enters CanonicalHistory. A
+    reasoning marker in the final body means the transient channel bled into the
+    persisted answer, so the body is rejected wherever the marker sits, not only
+    at its edges.
+    """
+
+    tool_call_tags: tuple[str, ...] = QWEN_TOOL_MARKUP
+    reasoning_tags: tuple[str, ...] = QWEN_REASONING_MARKUP
+
+    @classmethod
+    def of(cls, profile: RuntimeProfileConfig) -> Self:
+        return cls(profile.tool_markup_leak_markers, profile.reasoning_leak_markers)
+
+    @property
+    def leak_tags(self) -> tuple[str, ...]:
+        return (*self.tool_call_tags, *_MODEL_VIEW_TAGS)
+
 
 class AgentEngine:
     def __init__(
@@ -76,6 +116,8 @@ class AgentEngine:
         stop_signal: StopSignal | None = None,
         confirmation_gate: ConfirmationGate | None = None,
         turn_retrieval: TurnRetrieval | None = None,
+        think: bool = True,
+        response_markup: ResponseMarkup | None = None,
     ) -> None:
         if max_model_invocations < 1:
             raise ValueError("max_model_invocations must be positive")
@@ -102,6 +144,11 @@ class AgentEngine:
         self._event_sink = event_sink
         self._system_prompt = system_prompt
         self._model_options = model_options
+        # Vem de `sampling.thinking` da ExecutionRoute. Fixo em True, um perfil
+        # sem modo de raciocínio recebia o pedido mesmo assim, e o braço
+        # `thinking_ollama` desligado rodava igual ao ligado.
+        self._think = think
+        self._response_markup = response_markup or ResponseMarkup()
         self._seed = seed
         self._max_model_invocations = max_model_invocations
         self._max_tool_calls_per_step = max_tool_calls_per_step
@@ -279,11 +326,11 @@ class AgentEngine:
                 options=self._model_options,
                 seed=step_seed,
                 max_output_tokens=context.output_budget,
-                think=True,
+                think=self._think,
             )
             try:
                 response = await self._runtime.generate(request)
-                _validate_response(response)
+                _validate_response(response, self._response_markup)
             except MalformedModelResponseError as error:
                 rejected_count += 1
                 await self._store.append_canonical_history(
@@ -823,7 +870,7 @@ class AgentEngine:
             await self._event_sink.emit(event)
 
 
-def _validate_response(response: ModelResponse) -> None:
+def _validate_response(response: ModelResponse, markup: ResponseMarkup) -> None:
     # Blank counts as absent, and so does a body with no word in it. Four runs
     # answered the Operator with a single "]", a fragment of the wire format that
     # is no more an answer than an empty string is.
@@ -833,11 +880,11 @@ def _validate_response(response: ModelResponse) -> None:
     for call in response.tool_calls:
         if not call.id or not call.name:
             raise MalformedModelResponseError("model response contains an invalid tool call")
-    if response.content is not None and _leaked_reasoning(response.content):
+    if response.content is not None and _leaked_reasoning(response.content, markup):
         raise MalformedModelResponseError(
             "model response body carries reasoning markers, which are never persisted"
         )
-    if response.content is not None and _is_serialized_tool_call(response.content):
+    if response.content is not None and _is_serialized_tool_call(response.content, markup):
         raise MalformedModelResponseError(
             "model response body is a serialized tool call, not a final answer"
         )
@@ -889,36 +936,12 @@ _MODEL_FIXABLE_PREFLIGHT_REASONS = frozenset(
     }
 )
 
-# The runtime also emits tool calls as markup, not only as JSON. A leaked payload
-# starts or ends on one of these tags.
-#
-# The ModelView's own envelope belongs here too. The model reads that markup in
-# every step and does echo it back: asked to fetch a page it once answered with
-# `<model_attempt><content><null/></content><tool_calls>…`, which is the harness
-# describing an attempt, not the model answering. Persisted as a final response,
-# that markup reaches the Operator as the answer.
-_TOOL_CALL_TAGS = (
-    "<tool_call>",
-    "</tool_call>",
-    "<function=",
-    "</function>",
-    "<parameter=",
-    "</parameter>",
-    *(f"<{root}>" for root in MODEL_VIEW_ROOTS),
-    *(f"</{root}>" for root in MODEL_VIEW_ROOTS),
-)
 
-# Reasoning is transient by contract and never enters CanonicalHistory. A marker
-# in the final body means the transient channel bled into the persisted answer,
-# so the body is rejected wherever the marker sits, not only at its edges.
-_REASONING_TAGS = ("<think>", "</think>")
+def _leaked_reasoning(content: str, markup: ResponseMarkup) -> bool:
+    return any(tag in content for tag in markup.reasoning_tags)
 
 
-def _leaked_reasoning(content: str) -> bool:
-    return any(tag in content for tag in _REASONING_TAGS)
-
-
-def _is_serialized_tool_call(content: str) -> bool:
+def _is_serialized_tool_call(content: str, markup: ResponseMarkup) -> bool:
     """Detects a tool call emitted as prose instead of through the tool channel.
 
     The model sometimes answers with the wire payload it should have sent as a
@@ -933,7 +956,8 @@ def _is_serialized_tool_call(content: str) -> bool:
     passing is an answer.
     """
     stripped = content.strip()
-    if stripped.startswith(_TOOL_CALL_TAGS) or stripped.endswith(_TOOL_CALL_TAGS):
+    tags = markup.leak_tags
+    if stripped.startswith(tags) or stripped.endswith(tags):
         return True
     if stripped.startswith("```"):
         without_fence = stripped[3:].partition("\n")[2]

@@ -94,6 +94,26 @@ métricas recebe somente IDs, hashes, tamanhos, contagens, classes e tempos.
 9. Execute a tarefa fim a fim na superfície web e guarde os casos que falharam;
    não substitua o corpus por exemplos fáceis.
 
+## Bake-off de modelos
+
+Um braço que declara `runtime_profile` roda naquele Challenger, e só o modelo
+muda: rota, loop, contexto, registry e embedding do acervo são os do braço
+controle. Os braços rodam em sequência, e `scripts/run-experiment.py` troca o
+modelo entre eles pelo `ProfileRuntimeSwitch`
+(`src/harness/evals/runtime_switch.py`), que descarrega o anterior antes de
+subir o próximo — dois modelos de chat não cabem juntos em 8 GB, e o segundo
+iria parcial para a CPU e seria medido mais lento do que é.
+
+Cada perfil mede o orçamento com o próprio tokenizer, lido de
+`.harness/tokenizers/<runtime_profile_id>.json`; o do perfil da rota continua
+vindo de `--tokenizer`. O script imprime o digest de cada tokenizer usado, e ele
+entra no congelamento do resultado junto de `runtime_profile_id`.
+
+```bash
+uv run python scripts/run-experiment.py --tier model_smoke --profile <challenger_id>
+uv run python scripts/run-experiment.py runtime_profile_bakeoff --phase pilot
+```
+
 ## Digests
 
 Fixtures e experimentos usam SHA-256 de JSON canônico UTF-8, sem espaços e com

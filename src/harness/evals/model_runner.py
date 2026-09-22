@@ -16,13 +16,13 @@ import time
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 from urllib.parse import urlsplit
 
-from ..agent_engine import AgentEngine
+from ..agent_engine import AgentEngine, ResponseMarkup
 from ..brave_browser import BraveBrowserCapability, BraveEgressGuard
 from ..composite_tools import CompositeToolExecutor
-from ..config import HarnessConfig, ToolRegistryConfig
+from ..config import HarnessConfig, RuntimeProfileConfig, ToolRegistryConfig
 from ..context_builder import ContextBuilder, ModelViewFormat
 from ..conversation_store import ConversationStore
 from ..corpus_service import CorpusRetriever
@@ -105,6 +105,37 @@ def _sampling(settings: Mapping[str, JsonValue], name: str, default: float) -> f
     if isinstance(declared, bool) or not isinstance(declared, int | float):
         raise ValueError(f"arm setting {name} must be a number: {declared!r}")
     return float(declared)
+
+
+def _flag(settings: Mapping[str, JsonValue], name: str, default: bool) -> bool:
+    declared = settings.get(name)
+    if declared is None:
+        return default
+    if not isinstance(declared, bool):
+        raise ValueError(f"arm setting {name} must be a boolean: {declared!r}")
+    return declared
+
+
+def _count(settings: Mapping[str, JsonValue], name: str, default: int) -> int:
+    declared = settings.get(name)
+    if declared is None:
+        return default
+    if isinstance(declared, bool) or not isinstance(declared, int) or declared < 1:
+        raise ValueError(f"arm setting {name} must be a positive integer: {declared!r}")
+    return declared
+
+
+class RuntimeSwitch(Protocol):
+    """Brings up the runtime a bake-off arm names, and releases the one before it.
+
+    Arms run one after another, so a switch happens once per arm, not per case.
+    Two models do not share an 8 GB card, and the implementation is expected to
+    unload the previous one before loading the next.
+    """
+
+    async def activate(
+        self, profile: RuntimeProfileConfig
+    ) -> tuple[ModelRuntime, TokenEstimator]: ...
 
 
 def _eval_policy(permissions: Sequence[str] = _ALL_GRANTS) -> SessionPolicy:
@@ -362,10 +393,12 @@ class ModelCaseRunner:
         runtime_readiness: EngineReadiness | None = None,
         browser_guard: BraveEgressGuard | None = None,
         embedder: EmbeddingRuntime | None = None,
+        runtime_switch: RuntimeSwitch | None = None,
     ) -> None:
         self._config = config
         self._runtime = runtime
         self._estimator = estimator
+        self._runtime_switch = runtime_switch
         # Sem embedder, o acervo da fixture é montado pelo determinístico da
         # bancada, e o que chega ao modelo é a passagem que o hash sorteou. Com
         # ele, é a passagem que a produção entregaria — inclusive nenhuma.
@@ -382,10 +415,31 @@ class ModelCaseRunner:
     def supports(self, fixture_type: str) -> bool:
         return fixture_type in self._SUPPORTED_TYPES
 
+    async def _arm_runtime(
+        self, settings: Mapping[str, JsonValue]
+    ) -> tuple[HarnessConfig, ModelRuntime, TokenEstimator]:
+        """O perfil que o braço declara, ou o da rota quando ele não declara nenhum.
+
+        Um braço de bake-off troca o modelo e nada mais. Sem switch configurado, um
+        braço que pede outro perfil é erro: rodar o perfil errado com o rótulo
+        certo é o jeito de o relatório comparar um modelo com ele mesmo.
+        """
+        declared = settings.get("runtime_profile")
+        if declared is None or declared == self._config.runtime_profile.id:
+            return self._config, self._runtime, self._estimator
+        if not isinstance(declared, str):
+            raise ValueError(f"arm setting runtime_profile must be a string: {declared!r}")
+        if self._runtime_switch is None:
+            raise ValueError(f"arm asks for runtime profile {declared} and no switch is set")
+        config = self._config.for_runtime_profile(declared)
+        runtime, estimator = await self._runtime_switch.activate(config.runtime_profile)
+        return config, runtime, estimator
+
     async def run_case(self, spec: EvalCaseSpec) -> CaseRunResult:
         raw_request = spec.fixture.stimulus.get("user_request")
         if not isinstance(raw_request, str):
             raise ValueError(f"fixture has no user_request: {spec.fixture.id}")
+        config, runtime, estimator = await self._arm_runtime(spec.settings)
 
         started = time.monotonic()
         with tempfile.TemporaryDirectory(prefix="he-model-") as temporary:
@@ -399,9 +453,7 @@ class ModelCaseRunner:
                     spec.fixture,
                     base / "corpora",
                     embedder=self._embedder,
-                    counter=(
-                        self._estimator if isinstance(self._estimator, TextTokenCounter) else None
-                    ),
+                    counter=(estimator if isinstance(estimator, TextTokenCounter) else None),
                 )
                 if "corpus_documents" in spec.fixture.stimulus
                 else None
@@ -441,10 +493,10 @@ class ModelCaseRunner:
                 executor = self._executor(workspace, policy, bench, corpus)
                 engine = AgentEngine(
                     store=store,
-                    runtime=self._runtime,
+                    runtime=runtime,
                     tool_executor=executor,
                     context_builder=ContextBuilder(
-                        self._estimator,
+                        estimator,
                         context_window=self._config.context.initial_budget_tokens,
                         output_budget=self._config.loop.max_output_tokens,
                         model_view_format=_model_view_format(spec.settings),
@@ -452,7 +504,7 @@ class ModelCaseRunner:
                     event_sink=NullEventSink(),
                     confirmation_gate=WaivedWriteGate(store),
                     system_prompt=build_system_prompt(
-                        self._config,
+                        config,
                         today=BENCH_DATE,
                         operator_notes=self._operator_notes,
                     ),
@@ -461,16 +513,16 @@ class ModelCaseRunner:
                         "temperature": _sampling(
                             spec.settings,
                             "temperature",
-                            self._config.execution_route.sampling.temperature,
+                            config.execution_route.sampling.temperature,
                         ),
                         "presence_penalty": _sampling(
                             spec.settings,
                             "presence_penalty",
-                            self._config.execution_route.sampling.presence_penalty,
+                            config.execution_route.sampling.presence_penalty,
                         ),
                     },
                     seed=spec.seed,
-                    max_model_invocations=self._config.loop.max_steps,
+                    max_model_invocations=_count(spec.settings, "max_steps", config.loop.max_steps),
                     max_tool_calls_per_step=self._config.loop.max_tool_calls_per_step,
                     max_tool_calls_per_turn=self._config.loop.max_tool_calls_per_turn,
                     max_read_calls_per_turn=self._config.loop.max_read_calls_per_turn,
@@ -478,6 +530,10 @@ class ModelCaseRunner:
                     tool_effects=self._config.tool_registry.effects_by_tool,
                     max_turn_duration_seconds=self._config.loop.max_turn_duration_seconds,
                     runtime_readiness=self._runtime_readiness,
+                    think=_flag(
+                        spec.settings, "thinking", config.execution_route.sampling.thinking
+                    ),
+                    response_markup=ResponseMarkup.of(config.runtime_profile),
                     turn_retrieval=retrieval,
                 )
                 turn = await engine.run(conversation.id, request)
@@ -724,5 +780,6 @@ __all__ = [
     "BrowserBenchCaseRunner",
     "CompositeCaseRunner",
     "ModelCaseRunner",
+    "RuntimeSwitch",
     "build_live_runner",
 ]

@@ -170,6 +170,28 @@ class OllamaRuntime:
     async def health(self) -> OllamaProfileVerification:
         return await self.verify_profile()
 
+    async def loaded_models(self) -> tuple[str, ...]:
+        """Os modelos que o Ollama mantém carregados agora, pelo /api/ps."""
+        response = await self._request("GET", "/api/ps")
+        try:
+            loaded = OllamaTagsResponse.model_validate_json(response.content)
+        except ValidationError as error:
+            raise MalformedModelResponseError("Ollama returned invalid ps data") from error
+        return tuple(item.name for item in loaded.models)
+
+    async def unload(self, model: str | None = None) -> None:
+        """Tira um modelo da VRAM já, em vez de esperar o keep_alive vencer.
+
+        A bancada troca de modelo entre braços numa placa de 8 GB; dois modelos
+        de chat não cabem juntos, e o segundo carregaria parcialmente em CPU e
+        seria medido mais lento do que é.
+        """
+        await self._request(
+            "POST",
+            "/api/generate",
+            json={"model": model or self._model, "keep_alive": 0},
+        )
+
     async def aclose(self) -> None:
         await self._client.aclose()
 

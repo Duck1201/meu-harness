@@ -1,6 +1,7 @@
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from pathlib import Path
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict
 
@@ -119,13 +120,43 @@ class EmbeddingIdentityConfig(ConfigModel):
     max_input_tokens: int
 
 
+class RuntimeBackend(StrEnum):
+    OLLAMA = "ollama"
+    LLAMA_CPP = "llama_cpp"
+
+
+class RuntimeIdentityConfig(ConfigModel):
+    backend: RuntimeBackend
+
+
+# Markup the Qwen template uses for a tool call written as text. Kept as the
+# default because the functional profile was measured with it; a profile from
+# another family declares its own in `tool_markup_leak_markers`.
+QWEN_TOOL_MARKUP = (
+    "<tool_call>",
+    "</tool_call>",
+    "<function=",
+    "</function>",
+    "<parameter=",
+    "</parameter>",
+)
+QWEN_REASONING_MARKUP = ("<think>", "</think>")
+
+
 class RuntimeProfileConfig(ConfigModel):
     id: str
     status: str
     release_eligible: bool
     profile_digest_sha256: str
     model: ModelIdentityConfig
+    runtime: RuntimeIdentityConfig
     installation: Mapping[str, JsonValue]
+    # O que o motor procura numa resposta final para saber que uma tool call ou o
+    # raciocínio vazou para o texto. É do template, não do harness: cada família
+    # escreve a sua marcação, e um detector com as tags de outra deixa o vazamento
+    # chegar ao Operator como resposta.
+    tool_markup_leak_markers: tuple[str, ...] = QWEN_TOOL_MARKUP
+    reasoning_leak_markers: tuple[str, ...] = QWEN_REASONING_MARKUP
     capabilities: Mapping[str, CapabilityConfig] = {}
     # Ausente é uma resposta: um perfil sem modelo de embedding não tem Corpus,
     # e o harness prefere dizer isso a inventar um padrão.
@@ -226,11 +257,30 @@ class HarnessConfig(ConfigModel):
 
     @property
     def runtime_profile(self) -> RuntimeProfileConfig:
-        profile_id = self.execution_route.runtime_profile
+        return self.runtime_profile_by_id(self.execution_route.runtime_profile)
+
+    def runtime_profile_by_id(self, profile_id: str) -> RuntimeProfileConfig:
         for profile in self.model_profiles.runtime_profiles:
             if profile.id == profile_id:
                 return profile
         raise ValueError(f"runtime profile not found: {profile_id}")
+
+    def for_runtime_profile(self, profile_id: str) -> Self:
+        """The same contract with the default route pointed at another profile.
+
+        A bake-off arm changes the model and nothing else: route, loop, context and
+        registry stay the ones the control arm ran with. Deriving the whole config,
+        instead of handing the runner a profile on the side, keeps every reader —
+        the system prompt's capability lines included — looking at one profile.
+        """
+        self.runtime_profile_by_id(profile_id)
+        routes = tuple(
+            route.model_copy(update={"runtime_profile": profile_id})
+            if route.id == self.default_execution_route
+            else route
+            for route in self.execution_routes
+        )
+        return self.model_copy(update={"execution_routes": routes})
 
     @property
     def tool_schemas(self) -> tuple[ToolSchema, ...]:

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, cast
 
-from .agent_engine import AgentEngine
+from .agent_engine import AgentEngine, ResponseMarkup
 from .brave_browser import BraveBrowserCapability, BraveEgressGuard
 from .composite_tools import CompositeToolExecutor
 from .config import HarnessConfig, ToolRegistryConfig
@@ -733,6 +733,8 @@ class ApplicationService:
             max_turn_duration_seconds=self.config.loop.max_turn_duration_seconds,
             runtime_readiness=self._runtime_readiness,
             stop_signal=stop_signal,
+            think=self.config.execution_route.sampling.thinking,
+            response_markup=ResponseMarkup.of(self.config.runtime_profile),
             turn_retrieval=(
                 CorpusTurnRetrieval(
                     store=self.store,
