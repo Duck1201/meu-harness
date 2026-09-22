@@ -224,7 +224,7 @@ async def build_eval_corpus(
             text = str(entry.get("text", ""))
             data = text.encode("utf-8")
             draft = build_document(
-                extract(filename, data),
+                extract(filename, data, html_extractor=config.ingestion.html_extractor),
                 origin_kind=str(entry.get("origin_kind", "upload")),
                 origin_ref=str(entry.get("origin_ref", filename)),
                 source_digest=source_digest(data),

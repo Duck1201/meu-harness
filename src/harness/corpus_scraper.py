@@ -19,11 +19,12 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mappin
 from dataclasses import dataclass
 from html import escape
 from html.parser import HTMLParser
-from typing import cast
+from typing import Protocol, cast
 from urllib.parse import SplitResult, urlencode, urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 
 from .config import CorpusScraperConfig
+from .corpus_ingestion import extract_html
 from .web_tools import (
     SUPPRESSED_HTML_TAGS,
     AiohttpHttpTransport,
@@ -78,6 +79,12 @@ class ScrapePlan:
     detail: str
 
 
+class PageRenderer(Protocol):
+    """Renderiza uma URL num browser e devolve o HTML final (ADR 0014)."""
+
+    async def render(self, url: str) -> str: ...
+
+
 class Scraper:
     def __init__(
         self,
@@ -86,11 +93,13 @@ class Scraper:
         egress_guard: EgressGuard | None = None,
         transport: HttpTransport | None = None,
         sleep: Callable[[float], Awaitable[None]] | None = None,
+        renderer: PageRenderer | None = None,
     ) -> None:
         self._config = config
         self._guard = egress_guard or EgressGuard()
         self._transport = transport or AiohttpHttpTransport()
         self._sleep = sleep
+        self._renderer = renderer
 
     async def plan(self, seed: str) -> ScrapePlan:
         """Decides the route before spending anything on it."""
@@ -290,20 +299,42 @@ class Scraper:
             await self._wait()
             if response.status != 200 or not _is_html(response.headers):
                 continue
-            total_bytes += len(response.body)
+            body = await self._escalated(canonical, response.body)
+            total_bytes += len(body)
             collected += 1
             yield ScrapedPage(
                 url=canonical,
                 title=canonical,
                 filename="page.html",
-                data=response.body,
+                data=body,
             )
             if depth < settings.max_depth:
                 queue.extend(
                     (link, depth + 1)
-                    for link in _links(response.body, canonical)
+                    for link in _links(body, canonical)
                     if _canonical_url(link) not in seen
                 )
+
+    async def _escalated(self, url: str, body: bytes) -> bytes:
+        """O HTML renderizado no browser quando o HTTP trouxe só a casca.
+
+        Escala por sintoma, como o `web_fetch`: a página com texto visível passa
+        direto, e só a que chega abaixo de `thin_page_chars` paga um Chromium. Uma
+        renderização que falha devolve o que o HTTP trouxe — a página fina ainda é
+        uma página, e o resto da coleta não depende dela.
+        """
+        escalation = self._config.html_crawl.browser_escalation
+        if self._renderer is None or escalation.mode != "symptom":
+            return body
+        if _visible_chars(body) >= escalation.thin_page_chars:
+            return body
+        try:
+            rendered = await self._renderer.render(url)
+        except Exception:
+            return body
+        # Os links que o crawl segue saem deste HTML; os subrecursos que o browser
+        # pediu para montá-lo já passaram pelo guard um a um.
+        return rendered.encode("utf-8")
 
     async def _api(self, endpoint: str, parameters: Mapping[str, str]) -> Mapping[str, object]:
         """One API call, with the backoff a shared wiki asks for.
@@ -393,6 +424,11 @@ class Scraper:
             await self._sleep(delay)
             return
         await asyncio.sleep(delay)
+
+
+def _visible_chars(body: bytes) -> int:
+    document = extract_html(body.decode("utf-8", errors="replace"), title_fallback="")
+    return sum(len(block.text) for block in document.blocks)
 
 
 class _LinkParser(HTMLParser):

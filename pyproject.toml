@@ -9,9 +9,11 @@ dependencies = [
     "fastapi==0.116.1",
     "httpx>=0.28.1",
     "jsonschema>=4.25.0",
+    "markdownify>=1.1",
     "pydantic>=2.11.7",
     "pypdf>=6.15.0",
     "python-multipart>=0.0.32",
+    "scrapling>=0.4.15,<0.5",
     "sqlite-vec>=0.1.9",
     "tokenizers==0.21.4",
     "uvicorn==0.35.0",
@@ -19,6 +21,11 @@ dependencies = [
 
 [project.scripts]
 harness = "harness.__main__:main"
+
+[project.optional-dependencies]
+browser = [
+    "scrapling[fetchers]>=0.4.15,<0.5",
+]
 
 [dependency-groups]
 dev = [

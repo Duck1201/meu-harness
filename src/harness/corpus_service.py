@@ -485,7 +485,7 @@ class CorpusIngestionService:
                 "source_too_large",
                 f"O arquivo passa do limite de {settings.max_upload_bytes // (1024 * 1024)} MB.",
             )
-        extracted = extract(filename, data)
+        extracted = extract(filename, data, html_extractor=settings.html_extractor)
         draft = build_document(
             extracted,
             origin_kind=origin_kind,

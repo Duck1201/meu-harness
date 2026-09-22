@@ -8,10 +8,11 @@ from typing import Protocol, cast
 from .agent_engine import AgentEngine, ResponseMarkup
 from .brave_browser import BraveBrowserCapability, BraveEgressGuard
 from .composite_tools import CompositeToolExecutor
-from .config import HarnessConfig, ToolRegistryConfig
+from .config import CorpusScraperConfig, HarnessConfig, ToolRegistryConfig
 from .context_builder import ContextBuilder
 from .conversation_store import ConversationStore
-from .corpus_scraper import Scraper
+from .corpus_browser import ScraplingBrowserRenderer
+from .corpus_scraper import PageRenderer, Scraper
 from .corpus_service import (
     CorpusIngestionService,
     CorpusLibrary,
@@ -81,6 +82,15 @@ from .ports import (
 from .system_prompt import build_system_prompt
 from .web_tools import BrowserCapability, BrowserEgressGuard, WebToolExecutor
 from .workspace_coordinator import WorkspaceCoordinator
+
+
+def _browser_renderer(config: CorpusScraperConfig) -> PageRenderer | None:
+    escalation = config.html_crawl.browser_escalation
+    if escalation.mode != "symptom":
+        return None
+    return ScraplingBrowserRenderer(
+        stealth=escalation.stealth, timeout_milliseconds=escalation.timeout_milliseconds
+    )
 
 
 class ApplicationRuntime(ModelRuntime, Protocol):
@@ -219,7 +229,10 @@ class ApplicationService:
                 embedder=embedder,
                 counter=counter,
                 config=config.corpus,
-                scraper=Scraper(config=config.corpus.scraper),
+                scraper=Scraper(
+                    config=config.corpus.scraper,
+                    renderer=_browser_renderer(config.corpus.scraper),
+                ),
                 recorder=observability_store,
             )
             if self.corpus_library is not None and embedder is not None and counter is not None

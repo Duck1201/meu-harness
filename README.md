@@ -380,6 +380,24 @@ O modelo de embedding é o `bge-m3` (`ollama pull bge-m3`), declarado com digest
 próprio em `config/model-profiles.json`. Sem ele instalado, a aba diz isso em vez
 de fingir um acervo vazio.
 
+Dois interruptores em `config/harness.json#corpus` mudam a coleta, e os dois nascem
+desligados até o experimento de ingestão medir o ganho
+([ADR-0014](docs/adr/0014-corpus-browser-route-scrapling.md)):
+
+- `ingestion.html_extractor: "scrapling"` passa o HTML pela limpeza do
+  [Scrapling](https://scrapling.readthedocs.io/) antes de indexar — some o texto
+  escondido por `display:none`, `aria-hidden` ou `<template>`, que é onde uma
+  página hostil esconde instrução para o modelo. O download continua no
+  transporte guardado do harness.
+- `scraper.html_crawl.browser_escalation.mode: "symptom"` renderiza num Chromium
+  efêmero a página que o HTTP trouxe sem texto (site montado em JavaScript). Toda
+  requisição do browser passa pelo mesmo guard de rede. Precisa do extra:
+
+  ```bash
+  uv sync --extra browser
+  uv run scrapling install     # baixa o Chromium do Scrapling
+  ```
+
 ## Desenvolvimento
 
 ```bash

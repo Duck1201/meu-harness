@@ -176,6 +176,7 @@
     },
     "ingestion": {
       "accepted_extensions": [".txt", ".md", ".html", ".pdf"],
+      "html_extractor": "builtin",
       "reject_pdf_without_text_layer": true,
       "max_upload_bytes": 134217728,
       "cleaning": "deterministic_only",
@@ -224,7 +225,15 @@
         "max_depth": 3,
         "max_pages": 5000,
         "max_total_bytes": 2147483648,
-        "delay_milliseconds": 1000
+        "delay_milliseconds": 1000,
+        "browser_escalation": {
+          "mode": "disabled",
+          "thin_page_chars": 200,
+          "stealth": false,
+          "timeout_milliseconds": 30000,
+          "egress_guard": "every_browser_request",
+          "adr": "docs/adr/0014-corpus-browser-route-scrapling.md"
+        }
       }
     },
     "jobs": {

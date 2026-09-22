@@ -12,12 +12,14 @@ byte for byte.
 """
 
 import hashlib
+import logging
 import re
 import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from io import BytesIO
+from typing import Literal
 
 from .corpus_store import ChunkDraft, DocumentDraft
 from .domain import UNTRUSTED_WEB_TAINT
@@ -97,7 +99,12 @@ def accepted_extension(filename: str) -> str | None:
     return next((suffix for suffix in ACCEPTED_EXTENSIONS if lowered.endswith(suffix)), None)
 
 
-def extract(filename: str, data: bytes) -> ExtractedDocument:
+HtmlExtractor = Literal["builtin", "scrapling"]
+
+
+def extract(
+    filename: str, data: bytes, *, html_extractor: HtmlExtractor = "builtin"
+) -> ExtractedDocument:
     """Reads a supported file into blocks, or refuses it by name.
 
     The refusal names the accepted formats because the Operator is the one who
@@ -114,6 +121,8 @@ def extract(filename: str, data: bytes) -> ExtractedDocument:
         return extract_pdf(filename, data)
     text = _decoded(data)
     if suffix == ".html":
+        if html_extractor == "scrapling":
+            return extract_html_scrapling(text, title_fallback=_stem(filename))
         return extract_html(text, title_fallback=_stem(filename))
     if suffix == ".md":
         return extract_markdown(text, title_fallback=_stem(filename))
@@ -166,6 +175,58 @@ def extract_html(html: str, *, title_fallback: str) -> ExtractedDocument:
         title=parser.title or title_fallback,
         blocks=tuple(parser.blocks),
     )
+
+
+_SETEXT_UNDERLINE = re.compile(r"^(=+|-+)\s*$")
+_MARKDOWN_LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+
+
+def extract_html_scrapling(html: str, *, title_fallback: str) -> ExtractedDocument:
+    """HTML pela limpeza do Scrapling, depois pelo mesmo leitor de Markdown.
+
+    O Scrapling tira o que o leitor não vê e um modelo leria: elemento com
+    `display:none`, `aria-hidden`, `<template>`, comentário e caractere de largura
+    zero — o esconderijo clássico de instrução injetada numa página que vira
+    acervo. O que sobra chega como Markdown, e daí em diante o caminho é o de um
+    upload `.md`: título, trilha de headings e parágrafos. Menus continuam saindo
+    pela mesma heurística de densidade de links do extrator nativo.
+    """
+    from scrapling.engines.toolbelt.custom import Response
+
+    # O Response do Scrapling anuncia cada página como "Fetched (200)"; aqui não
+    # houve fetch nenhum, e o log do servidor não é lugar de ruído por Document.
+    logging.getLogger("scrapling").setLevel(logging.WARNING)
+    page = Response(
+        url="",
+        content=html,
+        status=200,
+        reason="OK",
+        cookies={},
+        headers={},
+        request_headers={},
+    )
+    title = _collapsed(str(page.css("title::text").get() or ""))
+    markdown = _atx_headings(_MARKDOWN_LINK.sub(r"\1", page.markdown(main_content_only=True)))
+    document = extract_markdown(markdown, title_fallback=title or title_fallback)
+    kept = set(without_link_menus(block.text for block in document.blocks))
+    return ExtractedDocument(
+        title=title or document.title,
+        blocks=tuple(block for block in document.blocks if block.text in kept),
+    )
+
+
+def _atx_headings(markdown: str) -> str:
+    """`Título\n=====` vira `# Título`: o leitor de Markdown só conhece a forma ATX."""
+    lines = markdown.split("\n")
+    converted: list[str] = []
+    for line in lines:
+        underline = _SETEXT_UNDERLINE.match(line)
+        if underline and converted and converted[-1].strip() and not converted[-1].startswith("#"):
+            level = 1 if underline.group(1).startswith("=") else 2
+            converted[-1] = f"{'#' * level} {converted[-1].strip()}"
+            continue
+        converted.append(line)
+    return "\n".join(converted)
 
 
 def extract_pdf(filename: str, data: bytes) -> ExtractedDocument:

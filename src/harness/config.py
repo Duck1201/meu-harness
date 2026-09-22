@@ -1,7 +1,7 @@
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict
 
@@ -56,6 +56,9 @@ class ContextConfig(ConfigModel):
 
 class CorpusIngestionConfig(ConfigModel):
     accepted_extensions: tuple[str, ...]
+    # Quem lê HTML na ingestão. `scrapling` limpa conteúdo oculto antes de extrair;
+    # o padrão só muda com o experimento de ingestão medido.
+    html_extractor: Literal["builtin", "scrapling"] = "builtin"
     max_upload_bytes: int
     chunk_target_tokens: int
     chunk_overlap_tokens: int
@@ -71,6 +74,15 @@ class CorpusRetrievalConfig(ConfigModel):
     max_injected_tokens: int
 
 
+class CorpusBrowserEscalationConfig(ConfigModel):
+    # `symptom` renderiza no browser a página que o HTTP trouxe sem texto; o
+    # padrão fica `disabled` até a rota ser medida (ADR 0014).
+    mode: Literal["disabled", "symptom"] = "disabled"
+    thin_page_chars: int = 200
+    stealth: bool = False
+    timeout_milliseconds: int = 30_000
+
+
 class CorpusCrawlConfig(ConfigModel):
     respect_robots_txt: bool
     prefer_sitemap: bool
@@ -78,6 +90,7 @@ class CorpusCrawlConfig(ConfigModel):
     max_pages: int
     max_total_bytes: int
     delay_milliseconds: int
+    browser_escalation: CorpusBrowserEscalationConfig = CorpusBrowserEscalationConfig()
 
 
 class CorpusMediaWikiConfig(ConfigModel):
