@@ -31,7 +31,7 @@ O vocabulário canônico está em [`CONTEXT.md`](../CONTEXT.md). Em particular:
 
 | Área | Decisão vigente |
 |---|---|
-| Runtime | Ollama local é o único runtime funcional; vLLM e remoto são candidatos sem rota ativa |
+| Runtime | Ollama local é o único runtime funcional; llama.cpp (`llama-server`) é o runtime dos Challengers que o Ollama não serve, verificado pelo SHA-256 do GGUF carregado ([ADR-0013](adr/0013-second-local-runtime-llama-cpp.md)); vLLM e remoto são candidatos sem rota ativa |
 | Challengers | Um RuntimeProfile pode existir com `status: challenger`: instalado, com digest medido e `release_eligible: false`. Nenhuma ExecutionRoute de produção o seleciona; só o braço de experimento que o nomeia em `runtime_profile`, e o braço troca o modelo e nada mais. Continua havendo exatamente um perfil `functional`, e um challenger só o substitui pelo protocolo de promoção |
 | Perfil ativo | `local_mitos_ollama_reproduction`, digest `a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74` |
 | Instalação | O perfil instalado foi recriado e está coerente com o `Modelfile` de SHA-256 `8f7f9e8e9b6d16539242c3e52ef37adfc3f0d0e00b7ac8a9a533c3c5f4deec7b` |

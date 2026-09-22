@@ -19,6 +19,7 @@ uv run python scripts/run-experiment.py --tier model_smoke --profile <id>  # ban
 harness                                        # sobe o servidor (uvicorn)
 harness --setup --port 8899                    # reabre o setup em outra porta
 scripts/searxng.sh                             # sobe/configura o SearXNG opcional
+scripts/llama-server.sh [profile]              # sobe o llama-server de um perfil llama_cpp
 ```
 
 CI (`.github/workflows/ci.yml`) roda três jobs: backend (ruff + pyright +
@@ -107,14 +108,14 @@ Composition root em `api._default_service`, chamado por `create_app` quando nada
 | Portas | `ports.py` (Protocols), `domain.py` (tipos) |
 | Tools | `local_tools.py`, `web_tools.py`, `composite_tools.py`, `brave_browser.py`, `page_verification.py` |
 | Estado | `conversation_store.py` (SQLite canônico), `observability_store.py` |
-| Contexto/modelo | `context_builder.py`, `system_prompt.py`, `token_estimator.py`, `ollama_runtime.py` |
+| Contexto/modelo | `context_builder.py`, `system_prompt.py`, `token_estimator.py`, `ollama_runtime.py`, `llamacpp_runtime.py` (ADR 0013) |
 | Corpus | `corpus_tools.py` (executor do efeito), `corpus_service.py`, `corpus_store.py` (um SQLite por acervo), `corpus_ingestion.py`, `corpus_scraper.py` |
 | Config | `config.py` (contratos JSON), `host_config.py` (HostConfig do host) |
 | Evals | `evals/` (runner, service, model_runner, runtime_switch, oracles, statistics, store, bench, loader, lease, models, language) |
 
 Fluxo de um Turn: `PendingRequest` -> `AgentEngine` itera AgentSteps ->
-`ModelView` reconstruída por `context_builder` a cada passo -> `ollama_runtime`
-gera -> tool calls passam por preflight/policy -> `ToolResult` volta ao
+`ModelView` reconstruída por `context_builder` a cada passo -> o runtime do
+perfil (`ollama_runtime` ou `llamacpp_runtime`, por `runtime.backend`) gera -> tool calls passam por preflight/policy -> `ToolResult` volta ao
 CanonicalHistory -> exatamente um `TerminalOutcome`.
 
 O `system_prompt` é **derivado dos contratos e de fatos do host** (ADR 0007), não

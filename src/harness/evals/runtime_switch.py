@@ -8,12 +8,18 @@ runtime já pronto e não sabe que houve troca.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
-from collections.abc import Callable, Mapping
+import time
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlsplit
+
+import httpx
 
 from ..config import RuntimeBackend, RuntimeProfileConfig
+from ..llamacpp_runtime import LlamaCppRuntime, gguf_digest
 from ..ollama_runtime import OllamaRuntime
 from ..ports import ModelMessage, ModelRequest, ModelRole, ModelRuntime, TokenEstimator
 from ..token_estimator import HuggingFaceTokenEstimator
@@ -121,6 +127,122 @@ class OllamaLauncher:
             await probe.aclose()
 
 
+class LlamaCppLauncher:
+    """Sobe um `llama-server` por perfil e o derruba quando o braço acaba.
+
+    Os argumentos do servidor são do contrato (`installation.server_args`), e o
+    arquivo é do host (`host.json#gguf_paths`). O digest do arquivo é conferido
+    antes de subir: um GGUF trocado em disco sob o mesmo nome é outro modelo, e
+    subir o servidor para descobrir isso custaria o load inteiro.
+    """
+
+    def __init__(
+        self,
+        *,
+        executable: Path,
+        base_url: str,
+        gguf_paths: Mapping[str, Path],
+        timeout: float,
+        startup_timeout: float = 240.0,
+        log_dir: Path | None = None,
+    ) -> None:
+        self._executable = executable
+        self._base_url = base_url.rstrip("/")
+        self._gguf_paths = dict(gguf_paths)
+        self._timeout = timeout
+        self._startup_timeout = startup_timeout
+        self._log_dir = log_dir
+        self._process: asyncio.subprocess.Process | None = None
+        self._runtime: LlamaCppRuntime | None = None
+
+    async def start(self, profile: RuntimeProfileConfig) -> ManagedRuntime:
+        path = self._gguf_paths.get(profile.id)
+        if path is None or not path.is_file():
+            raise RuntimeSwitchError(profile.id, "model_not_installed")
+        expected = str(profile.installation.get("gguf_sha256", ""))
+        if await gguf_digest(path) != expected:
+            raise RuntimeSwitchError(profile.id, "model_digest_mismatch")
+        await self.stop()
+        parsed = urlsplit(self._base_url)
+        arguments = [
+            "-m",
+            str(path),
+            "--host",
+            parsed.hostname or "127.0.0.1",
+            "--port",
+            str(parsed.port or 8081),
+            "--alias",
+            profile.model.id,
+            *server_arguments(profile),
+        ]
+        log = (
+            (self._log_dir / f"llama-server-{profile.id}.log").open("ab")
+            if self._log_dir is not None
+            else None
+        )
+        self._process = await asyncio.create_subprocess_exec(
+            str(self._executable),
+            *arguments,
+            stdout=log or asyncio.subprocess.DEVNULL,
+            stderr=log or asyncio.subprocess.DEVNULL,
+        )
+        await self._wait_until_healthy(profile.id)
+        runtime = LlamaCppRuntime(
+            base_url=self._base_url,
+            model=profile.model.id,
+            expected_digest=expected,
+            context_window=profile.context_window,
+            timeout=self._timeout,
+        )
+        verification = await runtime.verify_profile()
+        if not verification.ready:
+            await runtime.aclose()
+            await self.stop()
+            raise RuntimeSwitchError(profile.id, verification.reason_code or "not_ready")
+        self._runtime = runtime
+        return runtime
+
+    async def _wait_until_healthy(self, profile_id: str) -> None:
+        deadline = time.monotonic() + self._startup_timeout
+        async with httpx.AsyncClient(base_url=self._base_url, timeout=5) as client:
+            while time.monotonic() < deadline:
+                if self._process is not None and self._process.returncode is not None:
+                    raise RuntimeSwitchError(profile_id, "server_exited")
+                try:
+                    if (await client.get("/health")).status_code == 200:
+                        return
+                except httpx.HTTPError:
+                    pass
+                await asyncio.sleep(1)
+        await self.stop()
+        raise RuntimeSwitchError(profile_id, "server_start_timeout")
+
+    async def stop(self) -> None:
+        if self._runtime is not None:
+            await self._runtime.aclose()
+            self._runtime = None
+        process, self._process = self._process, None
+        if process is None or process.returncode is not None:
+            return
+        process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=30)
+        except TimeoutError:
+            process.kill()
+            await process.wait()
+
+    async def vacate(self) -> None:
+        await self.stop()
+
+
+def server_arguments(profile: RuntimeProfileConfig) -> Sequence[str]:
+    """Os argumentos do `llama-server` que o contrato declara para o perfil."""
+    raw = profile.installation.get("server_args", [])
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise RuntimeSwitchError(profile.id, "invalid_server_args")
+    return [str(item) for item in raw]
+
+
 class ProfileRuntimeSwitch:
     """Implementa `RuntimeSwitch`: um perfil ativo por vez, com seu tokenizer.
 
@@ -188,9 +310,11 @@ def _hugging_face_estimator(path: Path, digest: str) -> TokenEstimator:
 
 __all__ = [
     "BackendLauncher",
+    "LlamaCppLauncher",
     "ManagedRuntime",
     "OllamaLauncher",
     "ProfileRuntimeSwitch",
     "RuntimeSwitchError",
+    "server_arguments",
     "warm_up",
 ]

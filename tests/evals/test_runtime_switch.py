@@ -1,6 +1,7 @@
 """O switch deixa um modelo por vez na placa e cada braço com o seu tokenizer."""
 
 import asyncio
+import hashlib
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -10,9 +11,11 @@ from harness import load_config
 from harness.config import RuntimeBackend, RuntimeIdentityConfig, RuntimeProfileConfig
 from harness.evals.runtime_switch import (
     BackendLauncher,
+    LlamaCppLauncher,
     ManagedRuntime,
     ProfileRuntimeSwitch,
     RuntimeSwitchError,
+    server_arguments,
 )
 from harness.ports import ModelMessage, ModelRequest, ModelResponse, ToolSchema
 
@@ -134,3 +137,45 @@ def test_a_backend_without_launcher_is_refused(tmp_path: Path) -> None:
         asyncio.run(switch.activate(_profile("a", RuntimeBackend.LLAMA_CPP)))
 
     assert raised.value.reason_code == "backend_not_configured:llama_cpp"
+
+
+def _llama_profile(tmp_path: Path, weights: bytes, **installation: object) -> RuntimeProfileConfig:
+    base = _profile("cove", RuntimeBackend.LLAMA_CPP)
+    return base.model_copy(
+        update={
+            "installation": {
+                **base.installation,
+                "gguf_sha256": hashlib.sha256(weights).hexdigest(),
+                **installation,
+            }
+        }
+    )
+
+
+def test_the_launcher_refuses_a_missing_or_swapped_gguf(tmp_path: Path) -> None:
+    gguf = tmp_path / "cove.gguf"
+    launcher = LlamaCppLauncher(
+        executable=Path("/bin/false"),
+        base_url="http://127.0.0.1:1",
+        gguf_paths={"cove": gguf},
+        timeout=5,
+    )
+    profile = _llama_profile(tmp_path, b"declared weights")
+
+    with pytest.raises(RuntimeSwitchError) as missing:
+        asyncio.run(launcher.start(profile))
+    gguf.write_bytes(b"other weights")
+    with pytest.raises(RuntimeSwitchError) as swapped:
+        asyncio.run(launcher.start(profile))
+
+    assert missing.value.reason_code == "model_not_installed"
+    assert swapped.value.reason_code == "model_digest_mismatch"
+
+
+def test_server_arguments_come_from_the_contract(tmp_path: Path) -> None:
+    good = _llama_profile(tmp_path, b"w", server_args=["-c", "65536", "--jinja"])
+    bad = _llama_profile(tmp_path, b"w", server_args="-c 65536")
+
+    assert server_arguments(good) == ["-c", "65536", "--jinja"]
+    with pytest.raises(RuntimeSwitchError):
+        server_arguments(bad)

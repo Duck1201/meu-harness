@@ -10,7 +10,13 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict
 from tokenizers import Tokenizer
 
-from .host_config import CredentialStore, HostConfig, HostConfigStore, default_state_dir
+from .host_config import (
+    CredentialStore,
+    HostConfig,
+    HostConfigStore,
+    default_state_dir,
+    keeping_fields_outside_the_form,
+)
 
 
 class SetupSubmission(BaseModel):
@@ -93,7 +99,13 @@ class SetupController:
     def complete(self, supplied_token: str | None, submission: SetupSubmission) -> None:
         with self._lock:
             self._authorize(supplied_token)
-            self._host_store.write(validated_host_config(submission))
+            # Reabrir o setup (`--setup`) sobre um host já configurado reescreve o
+            # arquivo; o que o formulário não mostra continua valendo.
+            self._host_store.write(
+                keeping_fields_outside_the_form(
+                    validated_host_config(submission), self._host_store.load_optional()
+                )
+            )
             self._configured = True
             self._active = False
             self._restart_required = True

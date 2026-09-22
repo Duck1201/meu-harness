@@ -419,6 +419,35 @@ enquanto não rodarem, o baseline vigente permanece o que está no contrato.
 Medição inventada para preencher contrato é proibida (`docs/DECISOES-2.0.md`). Um
 experimento sem execução fica com `result: null`.
 
+### Bake-off de modelos e o llama.cpp
+
+Outros modelos entram como **Challengers**: perfis instalados e medidos que
+nenhuma rota de produção seleciona, comparados ao perfil funcional pelo mesmo
+protocolo. Os que o Ollama não serve direito rodam no `llama-server` do llama.cpp
+([ADR-0013](docs/adr/0013-second-local-runtime-llama-cpp.md)). Para a bancada
+subir esses perfis, declare no `host.json` o binário e onde está cada GGUF (a aba
+Configurações preserva esses campos ao salvar):
+
+```json
+{
+  "llama_server_executable": "/home/voce/.local/opt/llama.cpp/llama-server",
+  "gguf_paths": {"cove_4b_llamacpp": "/home/voce/.local/share/harness-2/gguf/CoVe-4B.Q4_K_M.gguf"}
+}
+```
+
+Cada perfil mede o orçamento com o próprio tokenizer, em
+`.harness/tokenizers/<runtime_profile_id>.json`. Com isso:
+
+```bash
+uv run python scripts/run-experiment.py --tier model_smoke --profile cove_4b_llamacpp
+uv run python scripts/run-experiment.py runtime_profile_bakeoff --phase pilot
+```
+
+Para servir a rota por um perfil llama.cpp, suba o servidor com
+`scripts/llama-server.sh`: ele monta a linha de comando a partir do `host.json`
+e dos `server_args` do perfil, e o harness confere o digest do GGUF carregado
+antes do primeiro Turn.
+
 ## Licença
 
 [Apache-2.0](LICENSE).

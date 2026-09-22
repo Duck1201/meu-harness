@@ -34,6 +34,7 @@ from harness import (  # noqa: E402
     EvalRunStatus,
     EvalStore,
     EvalTier,
+    HostConfigStore,
     OllamaEmbeddingRuntime,
     load_config,
 )
@@ -46,6 +47,8 @@ from harness.evals import (  # noqa: E402
     load_eval_catalog,
 )
 from harness.evals.runtime_switch import (  # noqa: E402
+    BackendLauncher,
+    LlamaCppLauncher,
     OllamaLauncher,
     ProfileRuntimeSwitch,
     RuntimeSwitchError,
@@ -53,6 +56,9 @@ from harness.evals.runtime_switch import (  # noqa: E402
 from harness.system_prompt import load_operator_notes  # noqa: E402
 
 OLLAMA_URL = "http://127.0.0.1:11434"
+# Porta própria da bancada: um llama-server de produção em 8081 continua de pé
+# enquanto a bancada sobe e derruba os seus.
+BENCH_LLAMA_SERVER_URL = "http://127.0.0.1:8091"
 
 
 async def run(
@@ -74,14 +80,26 @@ async def run(
     # O embedding indexa o acervo das fixtures e é o mesmo em todo braço: um
     # bake-off compara o modelo de chat diante das mesmas passagens.
     embedding = route_config.runtime_profile.embedding
+    launchers: dict[RuntimeBackend, BackendLauncher] = {
+        RuntimeBackend.OLLAMA: OllamaLauncher(
+            base_url=OLLAMA_URL,
+            timeout=config.loop.model_generation_timeout_seconds,
+            keep_loaded=frozenset({embedding.id} if embedding is not None else ()),
+        ),
+    }
+    # O binário e os GGUFs são do host; sem eles um braço llama_cpp falha com
+    # backend_not_configured em vez de rodar outro modelo no lugar.
+    host = HostConfigStore().load_optional()
+    if host is not None and host.llama_server_executable is not None:
+        launchers[RuntimeBackend.LLAMA_CPP] = LlamaCppLauncher(
+            executable=host.llama_server_executable,
+            base_url=BENCH_LLAMA_SERVER_URL,
+            gguf_paths=host.gguf_paths,
+            timeout=config.loop.model_generation_timeout_seconds,
+            log_dir=ROOT / ".harness",
+        )
     switch = ProfileRuntimeSwitch(
-        launchers={
-            RuntimeBackend.OLLAMA: OllamaLauncher(
-                base_url=OLLAMA_URL,
-                timeout=config.loop.model_generation_timeout_seconds,
-                keep_loaded=frozenset({embedding.id} if embedding is not None else ()),
-            ),
-        },
+        launchers=launchers,
         tokenizer_dir=tokenizer_dir,
         tokenizer_overrides={route_config.runtime_profile.id: tokenizer},
     )

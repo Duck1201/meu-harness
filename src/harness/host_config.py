@@ -36,6 +36,12 @@ class HostConfig(BaseModel):
     searxng_url: str | None = None
     ollama_url: str = "http://127.0.0.1:11434"
     browser_executable: Path | None = None
+    # Só pesam quando o perfil da rota é servido pelo llama.cpp (ADR 0013). O
+    # arquivo do modelo é do host e o digest dele é do contrato; o servidor em si
+    # é subido por `scripts/llama-server.sh` a partir destes mesmos campos.
+    llama_server_url: str = "http://127.0.0.1:8081"
+    llama_server_executable: Path | None = None
+    gguf_paths: Mapping[str, Path] = {}
 
     @field_validator("allowed_workspace_roots")
     @classmethod
@@ -74,12 +80,27 @@ class HostConfig(BaseModel):
             raise ValueError("browser_executable must be executable")
         return canonical
 
-    @field_validator("ollama_url")
+    @field_validator("llama_server_executable")
+    @classmethod
+    def validate_llama_server_executable(cls, path: Path | None) -> Path | None:
+        if path is None:
+            return None
+        canonical = _canonical_path(path, must_exist=True)
+        if not os.access(canonical, os.X_OK):
+            raise ValueError("llama_server_executable must be executable")
+        return canonical
+
+    @field_validator("gguf_paths")
+    @classmethod
+    def validate_gguf_paths(cls, paths: Mapping[str, Path]) -> Mapping[str, Path]:
+        return {profile: _canonical_path(path, must_exist=False) for profile, path in paths.items()}
+
+    @field_validator("ollama_url", "llama_server_url")
     @classmethod
     def validate_ollama_url(cls, value: str) -> str:
         parsed = urlsplit(value.strip())
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            raise ValueError("ollama_url must be an HTTP or HTTPS URL")
+            raise ValueError("runtime URLs must be HTTP or HTTPS URLs")
         return value.strip()
 
     @field_validator("searxng_url")
@@ -102,6 +123,20 @@ class HostConfig(BaseModel):
         if any(not _valid_origin(origin) for origin in validated):
             raise ValueError("allowed origins must be HTTP or HTTPS origins")
         return validated
+
+
+# Campos que o formulário de setup e a aba Configurações não carregam. Quem grava
+# pelo formulário reescreve o arquivo inteiro, e sem isto apagaria o servidor
+# llama.cpp e os GGUFs que o Operator declarou à mão.
+_FIELDS_OUTSIDE_THE_FORM = ("llama_server_url", "llama_server_executable", "gguf_paths")
+
+
+def keeping_fields_outside_the_form(new: HostConfig, previous: HostConfig | None) -> HostConfig:
+    if previous is None:
+        return new
+    return new.model_copy(
+        update={field: getattr(previous, field) for field in _FIELDS_OUTSIDE_THE_FORM}
+    )
 
 
 class HostConfigStore:

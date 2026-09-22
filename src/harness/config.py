@@ -157,6 +157,16 @@ class RuntimeProfileConfig(ConfigModel):
     # chegar ao Operator como resposta.
     tool_markup_leak_markers: tuple[str, ...] = QWEN_TOOL_MARKUP
     reasoning_leak_markers: tuple[str, ...] = QWEN_REASONING_MARKUP
+
+    @property
+    def context_window(self) -> int:
+        """A janela com que o runtime foi instalado: `num_ctx`, texto no Modelfile."""
+        parameters = self.installation.get("parameters")
+        raw = parameters.get("num_ctx") if isinstance(parameters, Mapping) else None
+        if isinstance(raw, bool) or not isinstance(raw, str | int):
+            raise ValueError(f"{self.id}: installation.parameters.num_ctx is missing")
+        return int(raw)
+
     capabilities: Mapping[str, CapabilityConfig] = {}
     # Ausente é uma resposta: um perfil sem modelo de embedding não tem Corpus,
     # e o harness prefere dizer isso a inventar um padrão.

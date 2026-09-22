@@ -188,3 +188,33 @@ def test_browser_executable_must_be_an_absolute_executable_path(tmp_path: Path) 
     assert build(None).browser_executable is None
     with pytest.raises(ValidationError, match="absolute"):
         build(Path("chromium"))
+
+
+def test_saving_the_form_keeps_the_llama_server_declared_by_hand(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def config(**extra: object) -> HostConfig:
+        return HostConfig.model_validate(
+            {
+                "allowed_workspace_roots": [str(workspace.resolve())],
+                "tokenizer_path": str((tmp_path / "tokenizer.json").resolve()),
+                "tokenizer_digest": "0" * 64,
+                "state_dir": str((tmp_path / "state").resolve()),
+                "allowed_origins": ["http://127.0.0.1:8000"],
+                **extra,
+            }
+        )
+
+    by_hand = config(
+        llama_server_url="http://127.0.0.1:8091",
+        gguf_paths={"cove_4b_llamacpp": str(tmp_path / "CoVe-4B.Q4_K_M.gguf")},
+    )
+    from_the_form = config(searxng_url="http://127.0.0.1:8080/search")
+
+    saved = host_config_module.keeping_fields_outside_the_form(from_the_form, by_hand)
+
+    assert saved.searxng_url == "http://127.0.0.1:8080/search"
+    assert saved.llama_server_url == "http://127.0.0.1:8091"
+    assert saved.gguf_paths == by_hand.gguf_paths
+    assert host_config_module.keeping_fields_outside_the_form(from_the_form, None) == from_the_form

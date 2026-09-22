@@ -17,9 +17,9 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .ag_ui import encode_sse, project_agent_event, run_error_event, run_started_event
-from .application_service import ApplicationService, ApplicationServiceError
+from .application_service import ApplicationRuntime, ApplicationService, ApplicationServiceError
 from .auth import AuthenticationError, SessionController, hash_password, verify_password
-from .config import load_config
+from .config import HarnessConfig, RuntimeBackend, load_config
 from .conversation_store import ConversationStore, NotFoundError
 from .corpus_service import IngestionJob
 from .domain import (
@@ -48,7 +48,9 @@ from .host_config import (
     HostConfig,
     HostConfigStore,
     default_state_dir,
+    keeping_fields_outside_the_form,
 )
+from .llamacpp_runtime import LlamaCppRuntime
 from .observability_store import ObservabilityStore
 from .ollama_runtime import OllamaEmbeddingRuntime, OllamaRuntime
 from .ports import ConfirmationRequest
@@ -58,6 +60,7 @@ from .token_estimator import HuggingFaceTokenEstimator
 
 DEFAULT_PORT = 8765
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+DEFAULT_LLAMA_SERVER_URL = "http://127.0.0.1:8081"
 # O contrato não é ajustável pelo host: o caminho é fixo por construção.
 HARNESS_CONFIG_PATH = Path("config/harness.json")
 
@@ -424,7 +427,11 @@ def create_app(
                 "This app was built without a host configuration store.",
                 status_code=409,
             )
-        host_store.write(validated_host_config(payload))
+        host_store.write(
+            keeping_fields_outside_the_form(
+                validated_host_config(payload), host_store.load_optional()
+            )
+        )
         # Nada é reconstruído a quente: trocar roots, tokenizer ou origin no meio
         # de um Turn mexeria em policy e executor já construídos.
         return {"restart_required": True}
@@ -911,12 +918,7 @@ def _default_service(
         host_config.tokenizer_path if host_config is not None else state_dir / "tokenizer.json"
     )
     tokenizer_digest = host_config.tokenizer_digest if host_config is not None else ""
-    runtime = OllamaRuntime(
-        base_url=(host_config.ollama_url if host_config is not None else DEFAULT_OLLAMA_URL),
-        model=config.runtime_profile.model.id,
-        expected_digest=config.runtime_profile.profile_digest_sha256,
-        timeout=config.loop.model_generation_timeout_seconds,
-    )
+    runtime = _model_runtime(config, host_config)
     estimator = HuggingFaceTokenEstimator(
         tokenizer_path,
         expected_sha256=tokenizer_digest,
@@ -946,6 +948,34 @@ def _default_service(
         operator_notes=load_operator_notes(),
         corpus_directory=state_dir / "corpora",
         embedder=embedder,
+    )
+
+
+def _model_runtime(config: HarnessConfig, host_config: HostConfig | None) -> ApplicationRuntime:
+    """O runtime do perfil da rota, escolhido pelo backend que o perfil declara.
+
+    O llama-server não é subido aqui: o harness conversa com um servidor que o
+    Operator levantou, e confere pelo digest que é o arquivo do contrato. Um
+    servidor com outro GGUF deixa o harness sem runtime, não com o modelo errado.
+    """
+    profile = config.runtime_profile
+    if profile.runtime.backend is RuntimeBackend.LLAMA_CPP:
+        return LlamaCppRuntime(
+            base_url=(
+                host_config.llama_server_url
+                if host_config is not None
+                else DEFAULT_LLAMA_SERVER_URL
+            ),
+            model=profile.model.id,
+            expected_digest=str(profile.installation.get("gguf_sha256", "")),
+            context_window=profile.context_window,
+            timeout=config.loop.model_generation_timeout_seconds,
+        )
+    return OllamaRuntime(
+        base_url=(host_config.ollama_url if host_config is not None else DEFAULT_OLLAMA_URL),
+        model=profile.model.id,
+        expected_digest=profile.profile_digest_sha256,
+        timeout=config.loop.model_generation_timeout_seconds,
     )
 
 
