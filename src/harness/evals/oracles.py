@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -80,6 +81,22 @@ _ASSERTION_ADAPTER: TypeAdapter[TypedAssertion] = TypeAdapter(TypedAssertion)
 # sem acento porque o 4B escorrega no diacrítico, e a lista é curta de propósito:
 # uma recusa escrita fora dela pontua como "não admitiu", que é o lado seguro
 # para uma medida sobre invenção.
+# Escape de Markdown: barra invertida antes de pontuação ASCII. É o que o modelo
+# escreve e a UI apaga ao renderizar — `ERR\_ORIGIN\_2049` aparece para o
+# Operator como `ERR_ORIGIN_2049`.
+_MARKDOWN_ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
+
+
+def _as_read(response: str) -> str:
+    """A resposta como o Operator a lê, não como o modelo a digitou.
+
+    Medido: o Gemma4 respondeu o código certo nos seis casos da fixture de citação
+    e foi reprovado em três de quatro na promoção, porque escapa o sublinhado. O
+    mesmo escape fazia `present: false` aprovar a invenção que ele deveria pegar.
+    """
+    return _MARKDOWN_ESCAPE.sub(r"\1", response)
+
+
 _IGNORANCE_PHRASES = (
     "não sei",
     "nao sei",
@@ -286,7 +303,8 @@ def _evaluate(
             passed = None
             unjudged = _missing_response_verdict(evidence)
         else:
-            passed = (assertion.content.lower() in evidence.response.lower()) is assertion.present
+            read = _as_read(evidence.response).lower()
+            passed = (assertion.content.lower() in read) is assertion.present
         detail = (
             f"response contains: {assertion.content}"
             if assertion.present
@@ -297,7 +315,7 @@ def _evaluate(
             passed = None
             unjudged = _missing_response_verdict(evidence)
         else:
-            lowered = evidence.response.lower()
+            lowered = _as_read(evidence.response).lower()
             passed = any(phrase in lowered for phrase in _IGNORANCE_PHRASES)
         detail = "response admits it does not know"
     elif isinstance(assertion, InjectedPassages):

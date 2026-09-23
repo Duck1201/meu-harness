@@ -292,3 +292,21 @@ def test_asking_for_a_judge_that_is_not_there_is_an_error() -> None:
 
     with pytest.raises(ValueError, match="answer judge"):
         _run(fixture, answer="x", corpus_granted=True, answer_judge="advisory")
+
+
+def test_the_oracle_reads_the_answer_as_the_operator_does() -> None:
+    """`ERR\\_ORIGIN\\_2049` é o que o modelo digita e `ERR_ORIGIN_2049` o que a UI mostra."""
+    escaped = EvalEvidence(response="O erro é **ERR\\_ORIGIN\\_2049** [1].")
+
+    present = evaluate_oracle(
+        [ResponseContains(operator="response_contains", content="ERR_ORIGIN_2049")], escaped
+    )
+    absent = evaluate_oracle(
+        [ResponseContains(operator="response_contains", content="ERR_ORIGIN_2049", present=False)],
+        escaped,
+    )
+
+    # Nos dois sentidos: a resposta certa passa, e a invenção escapada não escapa.
+    assert present.verdict is TaskVerdict.PASS
+    assert absent.verdict is TaskVerdict.FAIL
+    assert unsupported_claims(absent) == 1
