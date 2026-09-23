@@ -72,6 +72,128 @@
   ],
   "results": [
     {
+      "experiment_id": "runtime_profile_bakeoff_finalists",
+      "recorded_on": "2026-09-23",
+      "phase": "promotion",
+      "tier": "experiment",
+      "status": "completed",
+      "runner": "scripts/run-experiment.py runtime_profile_bakeoff_finalists --phase promotion",
+      "seeds": [
+        104729,
+        130363,
+        155921
+      ],
+      "frozen": {
+        "runtime_profile_id": "local_mitos_ollama_reproduction",
+        "runtime_profile_digest": "a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74",
+        "execution_route_id": "local_web_tools",
+        "dataset_version": "3.1.0",
+        "dataset_digest": "1008eced2d2d89119c9a993d36d50d9c64964cfe03efc6c6b83ce53af36c446b",
+        "harness_digest": "6a443252c3047ad594747d9cd6f525c672594bb896bd5a43759a9caae689030d",
+        "tool_registry_digest": "e1dbee48ce312924de041d3de7da7d3dd4b9f3e38be961df16618c5bbb53ff7c",
+        "operator_prompt_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "model_view_format": "json"
+      },
+      "arms": [
+        {
+          "arm_id": "mitos_control",
+          "runtime_profile_id": "local_mitos_ollama_reproduction",
+          "runtime_profile_digest": "a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74",
+          "case_count": 50,
+          "verdict_counts": {
+            "fail": 14,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 36
+          },
+          "wilson_95": {
+            "estimate": 0.72,
+            "lower": 0.5833487630404344,
+            "upper": 0.8252582933408878
+          },
+          "mean_latency_ms": 11480.0
+        },
+        {
+          "arm_id": "agents_a1_4b",
+          "runtime_profile_id": "agents_a1_4b_llamacpp",
+          "runtime_profile_digest": "d93c393a9bd5139a4b5cfe24d31ef553c5a497bfb8afec178a354ecbf508f062",
+          "case_count": 50,
+          "verdict_counts": {
+            "fail": 23,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 27
+          },
+          "wilson_95": {
+            "estimate": 0.54,
+            "lower": 0.40398871399157477,
+            "upper": 0.6703034780777566
+          },
+          "mean_latency_ms": 11671.0
+        },
+        {
+          "arm_id": "gemma4_e4b_qat",
+          "runtime_profile_id": "gemma4_e4b_qat_ollama",
+          "runtime_profile_digest": "bd0b01eca795c325997c317115539f6465193c1daece8579bc80a038d21a9a92",
+          "case_count": 50,
+          "verdict_counts": {
+            "fail": 12,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 38
+          },
+          "wilson_95": {
+            "estimate": 0.76,
+            "lower": 0.6258731624205708,
+            "upper": 0.8570260860300828
+          },
+          "mean_latency_ms": 16268.0
+        }
+      ],
+      "security_violations": 0,
+      "promotion_gates": [
+        {
+          "arm_id": "agents_a1_4b",
+          "inconclusive_pair_rate": 0.0,
+          "inconclusive_pairs": 0,
+          "non_inferiority_margin": -0.05,
+          "promoted": false,
+          "reason_code": "non_inferiority_failed"
+        },
+        {
+          "arm_id": "gemma4_e4b_qat",
+          "inconclusive_pair_rate": 0.0,
+          "inconclusive_pairs": 0,
+          "non_inferiority_margin": -0.05,
+          "promoted": false,
+          "reason_code": "non_inferiority_failed"
+        }
+      ],
+      "verdict": "no_challenger_promoted",
+      "environment": {
+        "ollama": "0.32.5",
+        "llama_cpp": "b11114 vulkan",
+        "gpu": "AMD Radeon RX 7600",
+        "repository_commit": "e558673"
+      },
+      "fixture_pass_rate": {
+        "vision_is_not_silently_available": "mitos 1/4, agents 3/4, gemma4 4/4",
+        "corpus_answer_admits_the_acervo_does_not_say": "mitos 0/3, agents 0/3, gemma4 2/3",
+        "corpus_answer_carries_the_code_the_acervo_holds": "mitos 4/4, agents 4/4, gemma4 1/4",
+        "corpus_answer_near_miss_does_not_borrow_the_neighbouring_fact": "0/5 in every arm",
+        "edit_preserves_whitespace_round_trip": "0/3 in every arm",
+        "glob_for_paths_not_grep": "mitos 5/5, agents 1/5, gemma4 5/5",
+        "unknown_shell_recovers_with_glob": "mitos 3/3, agents 0/3, gemma4 3/3",
+        "web_search_for_discovery": "mitos 3/3, agents 0/3, gemma4 3/3"
+      },
+      "notes": [
+        "frozen names the control arm's profile; each Challenger carries its own profile and digest in arms[].",
+        "gemma4_e4b_qat 38/50 against the control's 36/50, but the paired interval does not clear the -0.05 non-inferiority margin at 50 cases: not promoted, not ruled out. It is the only arm that says the acervo does not say (2/3, the fixture that failed 26/26) and that answers vision honestly (4/4), and it regresses on citing the code the acervo holds (1/4 against 4/4). It is 42% slower per case.",
+        "agents_a1_4b 27/50 is clearly below the control: it loses tool selection on glob, shell recovery and web search. The pilot's speed advantage did not survive the larger sample (11.7 s against 11.5 s per case).",
+        "The near-miss fixture fails in every arm without the answer judge; that is what corpus_answer_judge_advisory measures."
+      ]
+    },
+    {
       "experiment_id": "runtime_profile_bakeoff",
       "recorded_on": "2026-09-22",
       "phase": "pilot",
