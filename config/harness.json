@@ -249,7 +249,7 @@
         "max_total_bytes": 2147483648,
         "delay_milliseconds": 1000,
         "browser_escalation": {
-          "mode": "disabled",
+          "mode": "symptom",
           "thin_page_chars": 200,
           "stealth": false,
           "timeout_milliseconds": 30000,

@@ -23,9 +23,11 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
   braços. Treze candidatos medidos e registrados em `evals/experiments.json`.
 - **llama.cpp como segundo runtime** para Challengers que o Ollama não serve,
   verificado pelo SHA-256 do GGUF carregado ([ADR-0013](docs/adr/0013-second-local-runtime-llama-cpp.md)).
-- **Scrapling na coleta de Corpus**: limpeza de conteúdo oculto e rota de browser
-  por sintoma com o EgressGuard em toda requisição, ambos desligados até medição
-  ([ADR-0014](docs/adr/0014-corpus-browser-route-scrapling.md)).
+- **Scrapling na coleta de Corpus**: a rota de browser por sintoma, com o
+  EgressGuard em toda requisição, está ligada. A página montada em JavaScript
+  que o HTTP traz vazia é renderizada num Chromium efêmero. O extrator Scrapling
+  existe e fica desligado: na Wikipédia ele gasta de 20% a 44% mais tokens com
+  resíduo de Markdown ([ADR-0014](docs/adr/0014-corpus-browser-route-scrapling.md)).
 - **Visão local, ligada**: `describe_image` lê uma imagem do Workspace e pergunta
   ao Qwen3.5-2B local, fixado por digest; só texto volta, com aviso de incerteza.
   9/9 na bancada de `evals/vision` a temperatura 0, 4/4 em prints reais do

@@ -163,6 +163,21 @@ Reescrever a instrução não melhora o juiz escolhido (2026-09-23, mesmos 60 pa
 
 Na bancada fim a fim, a promoção de `corpus_answer_judge_advisory` passou no gate com 49/50 contra 45/50 e `unsupported_claims` 0 contra 1. O efeito atribuível ao juiz é um caso em 13 na fixture de quase-acerto; o resto da diferença está numa fixture em que o juiz não roda. O detalhe está em `experiments.json#results`.
 
+## Coleta de Corpus
+
+Medição de 2026-09-23 que decidiu os interruptores do [ADR-0014](../docs/adr/0014-corpus-browser-route-scrapling.md).
+
+A **rota de browser** rodou num Chromium de verdade. Em `quotes.toscrape.com/js/`, o HTTP trouxe 5 caracteres de texto e o browser trouxe 1416, em 2,5 s. O guard barrou `127.0.0.1` e `192.168.0.1` com `egress_refused`. Ela fica em `symptom` e só dispara abaixo de `thin_page_chars`.
+
+O **extrator** foi comparado em quatro páginas da Wikipédia em pt-BR (Santos Dumont, Rio Amazonas, Python e Café). As páginas foram baixadas como HTML, porque a coleta normal da Wikipédia vai pela API do MediaWiki e não passa por extrator nenhum, e indexadas com o `bge-m3` e o contrato de produção.
+
+| Extrator | Chunks | Caracteres | Respondíveis com a resposta nas passagens | Fora do acervo sem passagem |
+|---|---|---|---|---|
+| builtin | 234 | 287.672 | 7/7 | 2/2 |
+| scrapling | 309 | 355.470 | 7/7 | 2/2 |
+
+A leitura das passagens decidiu, e os números agregados empatam. O Scrapling tira a lista de 45 idiomas que o embutido põe no primeiro chunk da página. Em troca, deixa âncoras de citação com a URL da fonte, links de imagem em Markdown, tabelas vazias `| | |` e títulos de link colados no texto (`Palmira "Santos Dumont (Minas Gerais)")`), e gasta de 20% a 44% mais caracteres pelo mesmo conteúdo, o que acaba mais cedo com os 4000 tokens por Turn. `html_extractor` continua `builtin`. O ruído que sobra no embutido (lista de idiomas, `[editar | editar código]`, marcas `[1]`) é corrigível com limpeza determinística.
+
 ## Bancada de visão
 
 As imagens de [`evals/vision/`](vision/) medem o modelo de visão de

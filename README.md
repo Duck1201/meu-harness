@@ -402,9 +402,10 @@ O modelo de embedding é o `bge-m3` (`ollama pull bge-m3`), declarado com digest
 próprio em `config/model-profiles.json`. Sem ele instalado, a aba diz isso em vez
 de fingir um acervo vazio.
 
-Dois interruptores em `config/harness.json#corpus` mudam a coleta, e os dois nascem
-desligados até o experimento de ingestão medir o ganho
-([ADR-0014](docs/adr/0014-corpus-browser-route-scrapling.md)):
+Dois interruptores em `config/harness.json#corpus` mudam a coleta
+([ADR-0014](docs/adr/0014-corpus-browser-route-scrapling.md)). Medidos em
+23/09/2026, a rota de browser está ligada e o extrator Scrapling continua
+desligado:
 
 - `ingestion.html_extractor: "scrapling"` passa o HTML pela limpeza do
   [Scrapling](https://scrapling.readthedocs.io/) antes de indexar — some o texto
