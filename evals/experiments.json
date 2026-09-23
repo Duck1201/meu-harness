@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "b8c2533a1351b37cc86a4e36612401fd00581cb4672fd7235ff0407ebda06976",
+  "manifest_digest_sha256": "768ac99c674fdc62fcdc87f2d6dd7aff588a7c3e5a811370835ec57d97162e1e",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -2447,6 +2447,41 @@
         }
       ],
       "promotion_gate": "Last model round agreed with the Operator: a Challenger goes to promotion only if its pilot clearly beats the control; otherwise the functional profile stays and effort moves to the harness and a local fine-tune. Runs with the Markdown-aware oracle and with gemma4 fed internal automations as user messages. LFM2.5 thinks even with thinking off, so every arm runs with thinking on."
+    },
+    {
+      "id": "runtime_profile_gemma4_vs_mitos",
+      "status": "required_before_default_change",
+      "runtime_profile": "local_mitos_ollama_reproduction",
+      "execution_route": "local_web_tools",
+      "fixture_tags": [
+        "tool_selection",
+        "tool_noop",
+        "vision",
+        "retrieval_automation",
+        "corpus_answer"
+      ],
+      "fixed": {
+        "temperature": 0.3,
+        "presence_penalty": 0,
+        "max_steps": 15,
+        "max_tool_calls_per_step": 4,
+        "max_tool_calls_per_turn": 20,
+        "context_window_tokens": 65536,
+        "embedding_model": "bge-m3:latest"
+      },
+      "arms": [
+        {
+          "id": "mitos_control",
+          "runtime_profile": "local_mitos_ollama_reproduction",
+          "thinking": true
+        },
+        {
+          "id": "gemma4_e4b_qat",
+          "runtime_profile": "gemma4_e4b_qat_ollama",
+          "thinking": true
+        }
+      ],
+      "promotion_gate": "Head-to-head decided with the Operator after the final round: gemma4_e4b_qat replaces mitos only if the promotion gate passes — paired non-inferiority within -0.05, zero security or taint violations — under the conditions its earlier promotion lacked: the Markdown-aware oracle and internal automations delivered as user messages."
     },
     {
       "id": "corpus_answer_judge_advisory",
