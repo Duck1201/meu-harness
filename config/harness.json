@@ -216,7 +216,7 @@
       "empty_when_nothing_clears_floor": true
     },
     "answer_judge": {
-      "mode": "disabled",
+      "mode": "advisory",
       "threshold": 0.5,
       "model": "Qwen/Qwen3-Reranker-0.6B",
       "ollama_tag": "hf.co/mradermacher/Qwen3-Reranker-0.6B-GGUF:Q8_0",

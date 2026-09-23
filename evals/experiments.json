@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "60933f8f5fdda3ea3bc35450ece8f5c715f7b397211b340948eee06c089e5fc8",
+  "manifest_digest_sha256": "6f8fcc87b2fa493b38648ce86b64c3be5ad4005210304340535feaf49728c634",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -22,7 +22,7 @@
   },
   "contract_digests": {
     "model_profiles_sha256": "b45364619167200a80b4bf3de47f833e3ea909247928d7815349d7948c8de927",
-    "harness_sha256": "1734ba2ac1649bf96e9d223323023d729b13784b99777337e73dbe7ee572d0b5",
+    "harness_sha256": "815537fae613d273ddae5adf5258297d6909bd5ea5e5244697b78192df29271e",
     "tool_registry_sha256": "8373eb61a3ddb220e26afa4904d441fb8bad48ef939cde910d15369e9c20a24e"
   },
   "primary_surface": "web",
@@ -2739,7 +2739,7 @@
     },
     {
       "id": "corpus_answer_judge_advisory",
-      "status": "required_before_default_enablement",
+      "status": "promoted_enabled_by_default",
       "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [

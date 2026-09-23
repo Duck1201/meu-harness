@@ -419,7 +419,7 @@ desligados até o experimento de ingestão medir o ganho
   uv sync --extra browser
   uv run scrapling install     # baixa o Chromium do Scrapling
   ```
-- `answer_judge.mode: "advisory"` liga um juiz local no molde do Jev
+- `answer_judge.mode: "advisory"` (o padrão desde a promoção de 23/09/2026) liga um juiz local no molde do Jev
   ([ADR-0015](docs/adr/0015-corpus-answer-judge.md)): o Qwen3-Reranker-0.6B lê
   cada passagem recuperada e anota a probabilidade de ela trazer o que foi
   perguntado; se nenhuma trouxer, o modelo é avisado de que o acervo
