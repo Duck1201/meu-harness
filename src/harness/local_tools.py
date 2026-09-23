@@ -784,27 +784,7 @@ class RegistryToolExecutor:
                     retryable=False,
                     mutation=True,
                 )
-            start_offset = sum(len(line) for line in lines[: start_line - 1])
-            end_offset = sum(len(line) for line in lines[:end_line])
-            removed = before[start_offset:end_offset]
-            if _drops_trailing_newline(removed, replacement, before[end_offset:]):
-                # Observed: the model sends the block without its final newline and
-                # the next line is welded onto the last replaced one, producing a
-                # file the executor then reports as a success. Normalising silently
-                # would be worse: appending a newline breaks a deliberate edit of a
-                # file that has no final one. The refusal names what is missing.
-                return _error_result(
-                    call,
-                    ToolResultStatus.FAILED,
-                    "replacement_drops_line_break",
-                    "The replaced range ends with a line break and replacement does not, "
-                    "which would join the next line onto the last replaced one. Send this "
-                    "exact replacement instead: "
-                    f"{_corrected_replacement(removed, replacement)}",
-                    retryable=True,
-                    mutation=True,
-                )
-            after = before[:start_offset] + replacement + before[end_offset:]
+            after = _edited_bytes(before, lines, start_line, end_line, replacement)
             after_sha = sha256(after).hexdigest()
             if after == before:
                 return self._mutation_result(
@@ -935,10 +915,8 @@ class RegistryToolExecutor:
         end_line = cast(int, call.arguments["end_line"])
         if start_line > len(lines) or end_line > len(lines):
             return None
-        start_offset = sum(len(line) for line in lines[: start_line - 1])
-        end_offset = sum(len(line) for line in lines[:end_line])
         replacement = _string_argument(call, "replacement").encode("utf-8")
-        return before[:start_offset] + replacement + before[end_offset:]
+        return _edited_bytes(before, lines, start_line, end_line, replacement)
 
     def _normalized(self, call: ToolCall) -> ToolCall:
         definition = self._registry.get(call.name)
@@ -1134,15 +1112,53 @@ def _unified_diff(before: str, after: str, path: str) -> tuple[str, bool]:
     return "".join(lines).rstrip("\n"), truncated
 
 
-def _corrected_replacement(removed: bytes, replacement: bytes) -> str:
-    """The exact string the call should have carried, quoted so it can be copied.
+def _edited_bytes(
+    before: bytes, lines: list[bytes], start_line: int, end_line: int, replacement: bytes
+) -> bytes:
+    """The file after an edit, computed once for the preview and for the write.
 
-    An error that names two remedies invites the model to pick the wrong one:
-    told it could extend end_line instead, it extended the range and deleted the
-    line it meant to keep. One remedy, spelled out, leaves nothing to choose.
+    The Operator approves the preview, so it has to show the repaired block the
+    executor will write, not the raw one the model sent.
     """
-    break_bytes = b"\r\n" if removed.endswith(b"\r\n") else removed[-1:]
-    return json.dumps((replacement + break_bytes).decode("utf-8", errors="replace"))
+    start_offset = sum(len(line) for line in lines[: start_line - 1])
+    end_offset = sum(len(line) for line in lines[:end_line])
+    removed = before[start_offset:end_offset]
+    replacement = _undo_double_escape(removed, replacement)
+    if _drops_trailing_newline(removed, replacement, before[end_offset:]):
+        # Observed in 5 of 6 Gemma 4 seeds: the block arrives without its final
+        # break, and the next line would be welded onto the last replaced one.
+        # This used to be a refusal naming the fix; it cost the Turn its second
+        # call, and the model then told the Operator the edit had gone through.
+        # The check never fires on the last line, where dropping the break is a
+        # real edit, so restoring it cannot undo anything the model meant.
+        replacement += _line_break_of(removed)
+    return before[:start_offset] + replacement + before[end_offset:]
+
+
+def _line_break_of(removed: bytes) -> bytes:
+    """The break the replaced range ended with, so a CRLF file stays CRLF."""
+    return b"\r\n" if removed.endswith(b"\r\n") else removed[-1:]
+
+
+_ESCAPED = re.compile(rb'\\([ntr"\\])')
+_UNESCAPED = {b"n": b"\n", b"t": b"\t", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
+
+
+def _undo_double_escape(removed: bytes, replacement: bytes) -> bytes:
+    """Decodes a block the model escaped twice, and leaves anything else alone.
+
+    Observed in 3 of 6 Gemma 4 seeds: the file reaches the model as escaped JSON
+    and it writes the escapes back, so the tabs and breaks land as backslash-t
+    and backslash-n text on one line. The tell is shape: a range of two or more
+    lines replaced by a block with no real break but escaped ones. A single line
+    holding a string literal such as "a\\n" never matches, because it does not
+    replace several lines.
+    """
+    if removed.count(b"\n") < 2 or b"\n" in replacement or b"\r" in replacement:
+        return replacement
+    if b"\\n" not in replacement:
+        return replacement
+    return _ESCAPED.sub(lambda match: _UNESCAPED[match.group(1)], replacement)
 
 
 def _drops_trailing_newline(removed: bytes, replacement: bytes, following: bytes) -> bool:

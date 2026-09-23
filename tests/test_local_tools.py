@@ -9,6 +9,7 @@ from harness import (
     RegistryToolExecutor,
     SessionPolicy,
     ToolCall,
+    ToolResult,
     load_config,
 )
 
@@ -320,54 +321,133 @@ def test_edit_preserves_bytes_outside_inclusive_line_range(tmp_path: Path) -> No
     asyncio.run(scenario())
 
 
-def test_edit_refuses_a_replacement_that_would_weld_the_next_line(tmp_path: Path) -> None:
-    """Observed in a corpus run: the model omits the final break and the file breaks."""
+_APP_JS = b"function run(ok, value) {\n  if (ok) {\n    return value;\n  }\n}\n"
+_TABBED_APP_JS = b"function run(ok, value) {\n\tif (ok) {\n\t  return value;\n\t}\n}\n"
 
-    async def scenario() -> None:
-        before = b"function run(ok, value) {\n  if (ok) {\n    return value;\n  }\n}\n"
-        (tmp_path / "app.js").write_bytes(before)
+
+def _edit_app_js(tmp_path: Path, replacement: str) -> tuple[ToolResult, bytes]:
+    async def scenario() -> ToolResult:
+        (tmp_path / "app.js").write_bytes(_APP_JS)
         executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
-        arguments = {
-            "file_path": "app.js",
-            "start_line": 2,
-            "end_line": 4,
-            "expected_current_sha256": hashlib.sha256(before).hexdigest(),
-        }
-
-        welding = await executor.execute(
+        return await executor.execute(
             ToolCall(
-                id="edit-1",
+                id="edit",
                 name="edit",
-                arguments={**arguments, "replacement": "\tif (ok) {\n\t  return value;\n\t}"},
+                arguments={
+                    "file_path": "app.js",
+                    "start_line": 2,
+                    "end_line": 4,
+                    "replacement": replacement,
+                    "expected_current_sha256": hashlib.sha256(_APP_JS).hexdigest(),
+                },
             )
         )
 
-        assert welding.status.value == "failed"
-        assert welding.error is not None
-        assert welding.error["code"] == "replacement_drops_line_break"
-        assert welding.retryable is True
-        # One remedy, spelled out: naming a second one made the model extend the
-        # range instead and delete the line it meant to keep.
-        assert (
-            'Send this exact replacement instead: "\\tif (ok) {\\n\\t  return value;\\n\\t}\\n"'
-            in str(welding.error["message"])
-        )
-        assert (tmp_path / "app.js").read_bytes() == before
+    result = asyncio.run(scenario())
+    return result, (tmp_path / "app.js").read_bytes()
 
-        corrected = await executor.execute(
+
+def test_edit_keeps_the_line_break_the_replacement_left_out(tmp_path: Path) -> None:
+    """Observed in 5 of 6 Gemma 4 seeds: the block arrives without its final break.
+
+    Refusing cost the Turn its second call, and the model then told the Operator
+    the edit had gone through. The break is only restored when a line follows —
+    at the end of the file dropping it is a real edit — so there is no line the
+    model could have meant to weld on.
+    """
+    result, after = _edit_app_js(tmp_path, "\tif (ok) {\n\t  return value;\n\t}")
+
+    assert result.status.value == "success"
+    assert after == _TABBED_APP_JS
+
+
+def test_edit_keeps_a_crlf_break_the_replacement_left_out(tmp_path: Path) -> None:
+    async def scenario() -> ToolResult:
+        before = b"alpha\r\nbeta\r\ngamma\r\n"
+        (tmp_path / "crlf.txt").write_bytes(before)
+        executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
+        return await executor.execute(
             ToolCall(
-                id="edit-2",
+                id="edit",
                 name="edit",
-                arguments={**arguments, "replacement": "\tif (ok) {\n\t  return value;\n\t}\n"},
+                arguments={
+                    "file_path": "crlf.txt",
+                    "start_line": 2,
+                    "end_line": 2,
+                    "replacement": "BETA",
+                    "expected_current_sha256": hashlib.sha256(before).hexdigest(),
+                },
             )
         )
 
-        assert corrected.status.value == "success"
-        assert (tmp_path / "app.js").read_bytes() == (
-            b"function run(ok, value) {\n\tif (ok) {\n\t  return value;\n\t}\n}\n"
+    assert asyncio.run(scenario()).status.value == "success"
+    assert (tmp_path / "crlf.txt").read_bytes() == b"alpha\r\nBETA\r\ngamma\r\n"
+
+
+def test_edit_decodes_a_block_the_model_escaped_twice(tmp_path: Path) -> None:
+    """Observed in 3 of 6 Gemma 4 seeds: backslash-t and backslash-n as text.
+
+    The model reads the file as escaped JSON and writes the escapes back. A
+    multi-line range replaced by one line whose only breaks are escapes is that
+    mistake, not a line that holds a string literal.
+    """
+    result, after = _edit_app_js(tmp_path, "\\tif (ok) {\\n\\t  return value;\\n\\t}")
+
+    assert result.status.value == "success"
+    assert after == _TABBED_APP_JS
+
+
+def test_the_preview_shows_the_repaired_block_the_edit_will_write(tmp_path: Path) -> None:
+    # The Operator approves the preview: it cannot show backslash-t while the
+    # executor writes a tab.
+    async def scenario() -> str:
+        (tmp_path / "app.js").write_bytes(_APP_JS)
+        executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
+        preview = await executor.preview(
+            ToolCall(
+                id="edit",
+                name="edit",
+                arguments={
+                    "file_path": "app.js",
+                    "start_line": 2,
+                    "end_line": 4,
+                    "replacement": "\\tif (ok) {\\n\\t  return value;\\n\\t}",
+                    "expected_current_sha256": hashlib.sha256(_APP_JS).hexdigest(),
+                },
+            )
+        )
+        assert preview is not None
+        return preview.diff
+
+    diff = asyncio.run(scenario())
+
+    assert "+\tif (ok) {" in diff
+    assert "\\t" not in diff
+    assert "+}" not in diff
+
+
+def test_edit_keeps_escapes_that_belong_to_the_code(tmp_path: Path) -> None:
+    # One line replacing one line: an escape there is the code's own string literal.
+    async def scenario() -> ToolResult:
+        before = b"a = 1\nprint(a)\nz = 2\n"
+        (tmp_path / "s.py").write_bytes(before)
+        executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
+        return await executor.execute(
+            ToolCall(
+                id="edit",
+                name="edit",
+                arguments={
+                    "file_path": "s.py",
+                    "start_line": 2,
+                    "end_line": 2,
+                    "replacement": 'print("a\\tb\\n")\n',
+                    "expected_current_sha256": hashlib.sha256(before).hexdigest(),
+                },
+            )
         )
 
-    asyncio.run(scenario())
+    assert asyncio.run(scenario()).status.value == "success"
+    assert (tmp_path / "s.py").read_bytes() == b'a = 1\nprint("a\\tb\\n")\nz = 2\n'
 
 
 def test_edit_of_the_last_line_may_drop_the_final_newline(tmp_path: Path) -> None:

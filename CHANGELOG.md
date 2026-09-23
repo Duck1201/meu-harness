@@ -33,6 +33,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ### Corrigido
 
+- **`edit` repara os dois erros que o modelo mais comete.** O bloco sem a quebra
+  final ganha a quebra de volta; antes era recusado, e o modelo dizia ao
+  Operator que tinha editado. O bloco que troca várias linhas e chega com `\t` e
+  `\n` escritos como texto é decodificado. O preview mostra o bloco reparado. Na
+  fixture byte a byte, o Gemma foi de 0/6 para 4/6 em seis seeds, e o arquivo
+  saiu certo nas seis.
 - O oráculo de eval lê a resposta como o Operator a vê: escape de Markdown
   (`ERR\_ORIGIN\_2049`) reprovava resposta certa e aprovava invenção.
 - O oráculo de eval reprovava respostas honestas do Corpus. "Não há menção",
