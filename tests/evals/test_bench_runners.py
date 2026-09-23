@@ -30,7 +30,6 @@ from harness.evals.bench import (
 )
 from harness.evals.model_runner import WaivedWriteGate
 from harness.ports import ConfirmationRequest, ModelRuntime, TokenEstimator
-from harness.web_tools import EgressPolicyError
 
 # Mesma sonda cacheada de tests/test_brave_browser.py: `@cache` garante um único
 # launch por sessão de pytest mesmo com os dois módulos coletados.
@@ -77,26 +76,6 @@ def test_bench_guard_pins_only_the_bench_hostname() -> None:
             pinned = await guard.resolve(bench.url("/readable"))
             assert pinned.hostname == BENCH_HOSTNAME
             assert [address.host for address in pinned.addresses] == ["127.0.0.1"]
-
-            # Anything else still goes through the production checks.
-            with pytest.raises(EgressPolicyError):
-                await guard.resolve("http://127.0.0.1:1/")
-
-    asyncio.run(scenario())
-
-
-def test_bench_exception_is_refused_on_the_production_route() -> None:
-    async def scenario() -> None:
-        runner = BrowserBenchCaseRunner(registry=load_config().tool_registry)
-
-        result = await runner.run_case(
-            _spec(_fixtures()["eval_bench_exception_is_not_available_in_production"])
-        )
-
-        assert result.evaluation is not None
-        assert result.evaluation.verdict is TaskVerdict.PASS
-        assert result.security_violations == 0
-        assert result.metrics["data_egress_events"] == 0.0
 
     asyncio.run(scenario())
 

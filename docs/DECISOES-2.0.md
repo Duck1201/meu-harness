@@ -141,7 +141,7 @@ EgressGuard de qualquer saída para a rede ([ADR-0011](adr/0011-corpus-retrieval
 
 `web_search` consulta a instância SearXNG que o Operator declarar e cai para o DuckDuckGo quando ela não responde ou não foi configurada — nenhum dos dois exige credencial ([ADR-0009](adr/0009-search-provider-searxng-with-fallback.md)). `web_fetch` tenta HTTP guardado e pode escalar internamente para um Chromium local por sintoma. Ambos são `data_egress`, revalidam SSRF em redirects e produzem dados com UntrustedWebTaint.
 
-Cada execução de browser recebe contexto efêmero. A automação de PageRevision e o acesso web usam contextos distintos, sem cookies, cache, storage ou service workers compartilhados. O risco residual de DNS rebinding está documentado em [`RELEASE-PENDING.md`](RELEASE-PENDING.md).
+Cada execução de browser recebe contexto efêmero. A automação de PageRevision e o acesso web usam contextos distintos, sem cookies, cache, storage ou service workers compartilhados. Destinos locais e privados são permitidos ([ADR-0017](adr/0017-egress-allows-private-destinations.md)).
 
 ## Verificação de página
 

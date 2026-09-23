@@ -139,8 +139,9 @@ def test_every_browser_request_passes_the_guard() -> None:
     assert "conteudo montado" in html
     assert outcomes["https://site.test/app"] == "fallback"
     assert outcomes["https://cdn.test/app.js"] == "fallback"
-    assert outcomes["http://intranet.test/admin"] == "abort:blockedbyclient"
-    assert outcomes["http://metadata.test/latest/meta-data/"] == "abort:blockedbyclient"
+    # Destino privado passa: o guard só recusa o que não é URL válida.
+    assert outcomes["http://intranet.test/admin"] == "fallback"
+    assert outcomes["http://metadata.test/latest/meta-data/"] == "fallback"
     assert outcomes["data:image/png;base64,AAAA"] == "fallback"
     assert fetcher.socket.closed
 
@@ -151,16 +152,6 @@ def test_a_page_rendered_without_the_guard_is_discarded() -> None:
         _render(_Fetcher(run_setup=False))
 
     assert raised.value.code == "egress_guard_not_installed"
-
-
-def test_a_private_seed_or_final_url_is_refused() -> None:
-    with pytest.raises(BrowserRenderError) as seed:
-        _render(_Fetcher(), "http://intranet.test/")
-    with pytest.raises(BrowserRenderError) as redirected:
-        _render(_Fetcher(final_url="http://intranet.test/painel"))
-
-    assert seed.value.code == "egress_refused"
-    assert redirected.value.code == "egress_refused"
 
 
 class _Transport:

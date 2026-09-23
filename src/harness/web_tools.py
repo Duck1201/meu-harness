@@ -239,10 +239,8 @@ class GuardedResolver:
         self,
         *,
         lookup: AddressLookup | None = None,
-        private_origins: frozenset[str] = frozenset(),
     ) -> None:
         self._lookup = lookup or _system_lookup
-        self._private_origins = private_origins
         self._cache: dict[tuple[str, int], tuple[ResolvedAddress, ...]] = {}
 
     async def resolve(
@@ -272,11 +270,6 @@ class GuardedResolver:
                 raise EgressResolutionError(
                     "Host resolution returned an invalid address."
                 ) from error
-            if _is_non_public(parsed) and _origin_key(host, port) not in self._private_origins:
-                raise EgressPolicyError(
-                    "non_public_address",
-                    "The destination resolved to a non-public address.",
-                )
             item = ResolvedAddress(
                 host=parsed.compressed,
                 port=port,
@@ -296,11 +289,11 @@ class EgressGuard:
     def __init__(
         self,
         resolver: GuardedResolver | None = None,
-        *,
-        private_origins: frozenset[str] = frozenset(),
     ) -> None:
-        self._private_origins = private_origins
-        self._resolver = resolver or GuardedResolver(private_origins=private_origins)
+        # Destinos locais e privados são permitidos: o harness tem um único
+        # Operator, na própria máquina, e a rede dele (outros containers, o
+        # roteador, serviços da LAN) é justamente o que ele quer alcançar.
+        self._resolver = resolver or GuardedResolver()
 
     async def resolve(self, url: str) -> ResolvedTarget:
         parsed = self.validate_url(url)
@@ -344,22 +337,6 @@ class EgressGuard:
             raise EgressPolicyError("invalid_url_port", "The URL port is invalid.") from error
         if port == 0:
             raise EgressPolicyError("invalid_url_port", "The URL port is invalid.")
-        canonical_hostname = hostname.casefold().rstrip(".")
-        effective_port = port or (443 if parsed.scheme.casefold() == "https" else 80)
-        declared = _origin_key(canonical_hostname, effective_port) in self._private_origins
-        if not declared and (
-            canonical_hostname == "localhost" or canonical_hostname.endswith(".localhost")
-        ):
-            raise EgressPolicyError("localhost_not_allowed", "Localhost is not allowed.")
-        try:
-            literal = ipaddress.ip_address(canonical_hostname)
-        except ValueError:
-            literal = None
-        if literal is not None and _is_non_public(literal) and not declared:
-            raise EgressPolicyError(
-                "non_public_address",
-                "The destination uses a non-public address.",
-            )
         return parsed
 
 
@@ -391,14 +368,7 @@ class WebToolExecutor:
         self._http_transport = http_transport or AiohttpHttpTransport()
         self._search_endpoint = search_endpoint
         self._fallback_search_endpoint = fallback_search_endpoint
-        # A self-hosted SearXNG lives on loopback, which the egress guard denies by
-        # design. The Operator declaring that one endpoint is what lifts the denial,
-        # and only for it: web_fetch and the browser keep the strict guard.
-        self._search_egress_guard = (
-            egress_guard
-            if egress_guard is not None
-            else EgressGuard(private_origins=_url_origins(search_endpoint))
-        )
+        self._search_egress_guard = self._egress_guard
         self._browser_capability = browser_capability
         self._browser_egress_guard = browser_egress_guard
         self._max_response_bytes = max_response_bytes
@@ -939,12 +909,6 @@ async def _system_lookup(
     return converted
 
 
-def _is_non_public(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    # `is_global` already subsumes loopback, private, link-local, reserved and
-    # unspecified in both families; multicast is the one range it calls global.
-    return address.is_multicast or not address.is_global
-
-
 class _ReadableHTMLParser(HTMLParser):
     def __init__(self, base_url: str) -> None:
         super().__init__(convert_charrefs=True)
@@ -1133,24 +1097,6 @@ def _browser_unavailable(call: ToolCall, final_url: str) -> ToolResult:
 
 def _normalized_query(query: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", query).split())
-
-
-def _origin_key(host: str, port: int) -> str:
-    return f"{host.casefold().rstrip('.')}:{port}"
-
-
-def _url_origins(url: str | None) -> frozenset[str]:
-    if url is None:
-        return frozenset()
-    parsed = urlsplit(url)
-    hostname = parsed.hostname
-    if hostname is None:
-        return frozenset()
-    try:
-        port = parsed.port
-    except ValueError:
-        return frozenset()
-    return frozenset({_origin_key(hostname, port or (443 if parsed.scheme == "https" else 80))})
 
 
 def _search_result(

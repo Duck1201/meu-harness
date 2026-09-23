@@ -15,6 +15,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
   prompt derivado, a marca `<!-- OPERATOR -->`, o `seal-system-prompt.py` e o
   teste que falhava quando o espelho envelhecia. Comentários HTML no arquivo são
   ignorados. `scripts/show-system-prompt.py` imprime o prompt exato de hoje.
+- **O egress guard aceita destinos locais e privados.** `web_fetch`, a coleta de
+  Corpus e o navegador alcançam `localhost` e a rede local. O guard valida só a
+  forma da URL (`http`/`https`, sem usuário e senha)
+  ([ADR-0017](docs/adr/0017-egress-allows-private-destinations.md)).
 
 ### Adicionado
 

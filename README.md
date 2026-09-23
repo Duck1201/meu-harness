@@ -214,11 +214,9 @@ curl -s "http://127.0.0.1:8080/search?q=harness&format=json" | head -c 200
 Saiu JSON com `results`? Cole `http://127.0.0.1:8080/search` em **Configurações →
 Host → Instância SearXNG**, salve e reinicie o harness.
 
-Uma instância em loopback é o caso normal, e o `EgressGuard` nega faixas privadas
-por construção. O endereço que você declara vira uma allowlist de exatamente um
-`host:porta`, válida só no caminho do `web_search`: `web_fetch` e o navegador
-continuam com o guard estrito, e um destino privado que ninguém declarou continua
-recusado ([ADR-0009](docs/adr/0009-search-provider-searxng-with-fallback.md)).
+Uma instância em loopback é o caso normal. O `EgressGuard` não recusa destinos
+locais nem privados: `web_fetch`, a coleta de Corpus e o navegador alcançam a sua
+máquina e a sua rede local ([ADR-0017](docs/adr/0017-egress-allows-private-destinations.md)).
 
 Instância pública também serve — `searx.space` lista várias —, mas a maioria
 desliga `format=json` justamente contra bots. Teste com o `curl` acima antes de

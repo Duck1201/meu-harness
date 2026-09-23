@@ -128,61 +128,34 @@ def public_guard() -> EgressGuard:
     return EgressGuard(GuardedResolver(lookup=FakeLookup(((socket.AF_INET, "93.184.216.34"),))))
 
 
-def test_egress_guard_rejects_non_http_userinfo_localhost_and_non_public_ips() -> None:
+def test_egress_guard_rejects_non_http_and_userinfo() -> None:
     async def scenario() -> None:
-        blocked_urls = {
+        guard = public_guard()
+        for url, expected_code in {
             "ftp://example.com/file": "disallowed_url_scheme",
             "https://operator:secret@example.com/": "url_userinfo_not_allowed",
-            "http://localhost/": "localhost_not_allowed",
-            "http://127.0.0.1/": "non_public_address",
-            "http://10.0.0.1/": "non_public_address",
-            "http://169.254.1.1/": "non_public_address",
-            "http://100.64.0.1/": "non_public_address",
-            "http://224.0.0.1/": "non_public_address",
-            "http://240.0.0.1/": "non_public_address",
-            "http://0.0.0.0/": "non_public_address",
-            "http://[::1]/": "non_public_address",
-            "http://[fc00::1]/": "non_public_address",
-            "http://[fe80::1]/": "non_public_address",
-            "http://[ff02::1]/": "non_public_address",
-            "http://[::]/": "non_public_address",
-        }
-
-        for url, expected_code in blocked_urls.items():
-            lookup = FakeLookup(
-                ((socket.AF_INET6, url.split("[")[1].split("]")[0]),)
-                if "[" in url
-                else ((socket.AF_INET, url.split("//")[-1].split("/")[0]),)
-            )
-            guard = EgressGuard(GuardedResolver(lookup=lookup))
-            try:
+        }.items():
+            with pytest.raises(EgressPolicyError) as error:
                 await guard.resolve(url)
-            except EgressPolicyError as error:
-                assert error.code == expected_code
-            else:
-                raise AssertionError(f"Expected {url} to be rejected")
+            assert error.value.code == expected_code
 
     asyncio.run(scenario())
 
 
-def test_guarded_resolver_rejects_entire_hostname_when_one_result_is_private() -> None:
+def test_egress_guard_lets_local_and_private_destinations_through() -> None:
+    # O harness tem um Operator só, na própria máquina: a rede dele (outros
+    # containers, o roteador, a LAN) é destino legítimo, não ameaça.
     async def scenario() -> None:
-        lookup = FakeLookup(
-            (
-                (socket.AF_INET, "93.184.216.34"),
-                (socket.AF_INET6, "2001:4860:4860::8888"),
-                (socket.AF_INET, "192.168.1.20"),
-            )
-        )
-        guard = EgressGuard(GuardedResolver(lookup=lookup))
-
-        try:
-            await guard.resolve("https://example.com/resource")
-        except EgressPolicyError as error:
-            assert error.code == "non_public_address"
-        else:
-            raise AssertionError("Expected mixed DNS results to be rejected")
-        assert lookup.calls == [("example.com", 443)]
+        for url, address in {
+            "http://localhost:8080/": "127.0.0.1",
+            "http://127.0.0.1:18789/": "127.0.0.1",
+            "http://192.168.0.1/": "192.168.0.1",
+            "http://[::1]/": "::1",
+        }.items():
+            family = socket.AF_INET6 if ":" in address else socket.AF_INET
+            guard = EgressGuard(GuardedResolver(lookup=FakeLookup(((family, address),))))
+            target = await guard.resolve(url)
+            assert [item.host for item in target.addresses] == [address]
 
     asyncio.run(scenario())
 
@@ -228,7 +201,7 @@ def test_web_preflight_requires_grant_and_validates_registry_schema() -> None:
 def test_web_fetch_revalidates_redirect_before_following_it() -> None:
     async def scenario() -> None:
         transport = FakeHttpTransport(
-            (HttpResponse(status=302, headers={"Location": "http://127.0.0.1/secret"}, body=b""),)
+            (HttpResponse(status=302, headers={"Location": "ftp://example.com/secret"}, body=b""),)
         )
         executor = WebToolExecutor(
             registry=load_config().tool_registry,
@@ -243,7 +216,7 @@ def test_web_fetch_revalidates_redirect_before_following_it() -> None:
 
         assert result.status.value == "blocked"
         assert result.error is not None
-        assert result.error["code"] == "non_public_address"
+        assert result.error["code"] == "disallowed_url_scheme"
         assert len(transport.requests) == 1
 
     asyncio.run(scenario())
@@ -636,27 +609,6 @@ def test_web_search_without_any_provider_reachable_is_failed_not_blocked() -> No
         assert result.retryable is True
         assert result.error is not None
         assert result.error["code"] == "provider_unavailable"
-
-    asyncio.run(scenario())
-
-
-def test_declared_searxng_origin_is_the_only_private_address_search_may_reach() -> None:
-    async def scenario() -> None:
-        loopback = EgressGuard(
-            GuardedResolver(
-                lookup=FakeLookup(((socket.AF_INET, "127.0.0.1"),)),
-                private_origins=frozenset({"127.0.0.1:8080"}),
-            ),
-            private_origins=frozenset({"127.0.0.1:8080"}),
-        )
-
-        assert loopback.validate_url("http://127.0.0.1:8080/search") is not None
-        with pytest.raises(EgressPolicyError) as other_port:
-            loopback.validate_url("http://127.0.0.1:9999/search")
-        assert other_port.value.code == "non_public_address"
-        with pytest.raises(EgressPolicyError) as strict:
-            EgressGuard().validate_url("http://127.0.0.1:8080/search")
-        assert strict.value.code == "non_public_address"
 
     asyncio.run(scenario())
 
