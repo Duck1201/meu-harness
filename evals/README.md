@@ -193,3 +193,10 @@ runtime):
 A temperatura decidiu: a 0,2 o Qwen3.5-2B inventou a senha ilegível em 3 de 10
 seeds e leu a linha `118` como `18` em 5; a 0 foi honesto e certo 10 de 10.
 
+Os prints reais do Operator ficam fora do repositório, porque um deles é uma foto
+de rosto, e rodam com `--cases <pasta>`, uma pasta com `cases.json` no mesmo
+formato. Em 2026-09-23 foram 4/4 pelo runtime de produção, com mediana de 2,5 s.
+Os casos: uma tabela de valores de golpe do Pix (os retornos e os três selos), um
+retrato (óculos, cor do cabelo e da roupa) e um desenho do Bart com emojis de
+fundo (o modelo viu que os corações são partidos).
+

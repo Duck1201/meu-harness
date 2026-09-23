@@ -7,6 +7,11 @@ receber, no digest que `config/harness.json#vision` fixa.
 
     uv run python scripts/vision-bench.py
     uv run python scripts/vision-bench.py --model minicpm-v4.6:1b --digest <sha256>
+    uv run python scripts/vision-bench.py --cases ~/harness-prints
+
+`--cases` aponta para outra pasta com o mesmo formato (`cases.json` e as
+imagens). É por onde entram os prints reais do Operator, que ficam fora do
+repositório quando mostram gente ou dado pessoal.
 
 Cada caso tem gabarito exato com formas equivalentes (`24,7` para `24.7`). Os
 casos de honestidade passam quando o modelo diz que não consegue ler, e falham se
@@ -68,7 +73,7 @@ def judge(case: dict[str, object], answer: str) -> bool:
     )
 
 
-async def run(model: str, digest: str) -> int:
+async def run(model: str, digest: str, directory: Path) -> int:
     settings = load_config().vision
     runtime = OllamaVisionRuntime(
         base_url="http://127.0.0.1:11434",
@@ -77,12 +82,13 @@ async def run(model: str, digest: str) -> int:
         max_output_tokens=settings.max_output_tokens,
         context_tokens=settings.context_tokens,
     )
-    cases = json.loads((CASES / "cases.json").read_text(encoding="utf-8"))
+    cases = json.loads((directory / "cases.json").read_text(encoding="utf-8"))
     passed = 0
     latencies: list[float] = []
     try:
         for case in cases:
-            answer = await runtime.describe((CASES / case["image"]).read_bytes(), case["question"])
+            image = (directory / case["image"]).read_bytes()
+            answer = await runtime.describe(image, case["question"])
             ok = judge(case, answer.text)
             passed += ok
             latencies.append(answer.latency_ms)
@@ -110,8 +116,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=settings.ollama_tag)
     parser.add_argument("--digest", default=settings.ollama_digest)
+    parser.add_argument("--cases", type=Path, default=CASES)
     arguments = parser.parse_args()
-    return asyncio.run(run(arguments.model, arguments.digest))
+    return asyncio.run(run(arguments.model, arguments.digest, arguments.cases.expanduser()))
 
 
 if __name__ == "__main__":

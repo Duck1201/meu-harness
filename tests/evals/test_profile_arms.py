@@ -49,8 +49,14 @@ def _fixture() -> RegressionFixture:
 
 
 def _config_with_challenger() -> HarnessConfig:
-    """Controle com a marcação do Qwen e Challenger com a do Gemma, seja qual for o ativo."""
+    """Controle com a marcação do Qwen e Challenger com a do Gemma, seja qual for o ativo.
+
+    A visão fica desligada: estes runners não montam runtime de visão.
+    """
     config = load_config()
+    config = config.model_copy(
+        update={"vision": config.vision.model_copy(update={"mode": "disabled"})}
+    )
     control = config.runtime_profile.model_copy(
         update={
             "tool_markup_leak_markers": QWEN_TOOL_MARKUP,

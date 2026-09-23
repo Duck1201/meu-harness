@@ -119,8 +119,8 @@ class CorpusAnswerJudgeConfig(ConfigModel):
 
 
 class VisionConfig(ConfigModel):
-    # `enabled` oferece `describe_image`; nasce `disabled` até o experimento
-    # `vision_tool_enablement` medir (ADR 0016).
+    # `enabled` oferece `describe_image`. O padrão do modelo é `disabled`; o
+    # contrato liga desde a promoção de `vision_tool_enablement` (ADR 0016).
     mode: Literal["disabled", "enabled"] = "disabled"
     ollama_tag: str = ""
     ollama_digest: str = ""

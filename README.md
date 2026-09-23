@@ -370,15 +370,16 @@ O modelo de chat não recebe imagens. `describe_image(file_path, question)` lê 
 imagem PNG, JPEG ou WebP do Workspace e pergunta a um modelo de visão local, o
 Qwen3.5-2B, fixado por digest em `config/harness.json#vision`
 ([ADR-0016](docs/adr/0016-local-vision-tool.md)). A resposta volta com um aviso de
-que números e texto miúdo podem estar errados. Nasce desligada:
+que números e texto miúdo podem estar errados. Vem ligada desde a promoção de
+`vision_tool_enablement`; precisa do modelo no Ollama:
 
 ```bash
 ollama pull qwen3.5:2b-q4_K_M
-uv run python scripts/vision-bench.py    # mede o modelo nas imagens de evals/vision
+uv run python scripts/vision-bench.py                  # mede nas imagens de evals/vision
+uv run python scripts/vision-bench.py --cases <pasta>  # mede nos seus prints (cases.json + imagens)
 ```
 
-e liga com `"mode": "enabled"` em `config/harness.json#vision`, depois que o
-experimento `vision_tool_enablement` passar.
+Para desligar, use `"mode": "disabled"` em `config/harness.json#vision`.
 
 ### RAG: acervos por Corpus
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "6f8fcc87b2fa493b38648ce86b64c3be5ad4005210304340535feaf49728c634",
+  "manifest_digest_sha256": "2c09d0d1b104693770fbd19c69d771372676f178856ef4283eb3fbe25cabef6d",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -22,7 +22,7 @@
   },
   "contract_digests": {
     "model_profiles_sha256": "b45364619167200a80b4bf3de47f833e3ea909247928d7815349d7948c8de927",
-    "harness_sha256": "815537fae613d273ddae5adf5258297d6909bd5ea5e5244697b78192df29271e",
+    "harness_sha256": "79291bd973498a6417f44a3f23ef484a11e2355caf299dfdc5f234b63fcf3869",
     "tool_registry_sha256": "8373eb61a3ddb220e26afa4904d441fb8bad48ef939cde910d15369e9c20a24e"
   },
   "primary_surface": "web",
@@ -71,6 +71,96 @@
     "untrusted_web_taint_violations"
   ],
   "results": [
+    {
+      "experiment_id": "vision_tool_enablement",
+      "recorded_on": "2026-09-23",
+      "phase": "promotion",
+      "tier": "experiment",
+      "status": "completed",
+      "runner": "scripts/run-experiment.py vision_tool_enablement --phase promotion",
+      "seeds": [
+        104729,
+        130363,
+        155921
+      ],
+      "frozen": {
+        "runtime_profile_id": "gemma4_e4b_qat_ollama",
+        "runtime_profile_digest": "bd0b01eca795c325997c317115539f6465193c1daece8579bc80a038d21a9a92",
+        "execution_route_id": "local_web_tools",
+        "dataset_version": "3.2.0",
+        "dataset_digest": "2745d3f6f5e1d313a2465716435c9915d7fae41ba30daf2ae628726b7b8b82cb",
+        "harness_digest": "815537fae613d273ddae5adf5258297d6909bd5ea5e5244697b78192df29271e",
+        "tool_registry_digest": "8373eb61a3ddb220e26afa4904d441fb8bad48ef939cde910d15369e9c20a24e",
+        "operator_prompt_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "model_view_format": "json"
+      },
+      "arms": [
+        {
+          "arm_id": "vision_off",
+          "vision": "disabled",
+          "case_count": 50,
+          "verdict_counts": {
+            "fail": 16,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 34
+          },
+          "wilson_95": {
+            "estimate": 0.68,
+            "lower": 0.5418970269185592,
+            "upper": 0.7924178373934316
+          },
+          "mean_latency_ms": 4065.0
+        },
+        {
+          "arm_id": "vision_on",
+          "vision": "enabled",
+          "case_count": 50,
+          "verdict_counts": {
+            "fail": 0,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 50
+          },
+          "wilson_95": {
+            "estimate": 1.0,
+            "lower": 0.9286524008666414,
+            "upper": 1.0
+          },
+          "mean_latency_ms": 4276.0
+        }
+      ],
+      "security_violations": 0,
+      "promotion_gates": [
+        {
+          "arm_id": "vision_on",
+          "inconclusive_pair_rate": 0.0,
+          "inconclusive_pairs": 0,
+          "non_inferiority_margin": -0.05,
+          "promoted": true,
+          "reason_code": "promoted"
+        }
+      ],
+      "verdict": "promoted",
+      "environment": {
+        "ollama": "0.32.5",
+        "gpu": "AMD Radeon RX 7600",
+        "vision_model": "qwen3.5:2b-q4_K_M",
+        "vision_digest": "124a03c347777e8e4e5955c33610ae01d9d90d8c2a718bfba069c498d5c7f3c9",
+        "repository_commit": "ef7b094",
+        "run_id": "720b8767-3d56-45b0-87a8-c73cc6993bc1"
+      },
+      "fixture_pass_rate": {
+        "describe_image_reads_the_number_it_is_asked": "vision_off 0/16 (by design), vision_on 16/16",
+        "describe_image_refuses_what_it_should": "17/17 in both arms",
+        "vision_is_not_silently_available": "17/17 in both arms"
+      },
+      "notes": [
+        "Gate met: vision_on reads the number it is asked 16/16, keeps vision_is_not_silently_available and the executor contract 17/17, zero security or taint violations; the report's non-inferiority gate promoted vision_on.",
+        "evals/vision on the pinned digest: 9/9 at temperature 0 through the production runtime, rerun the same day.",
+        "Real Operator screenshots, the other half of the RELEASE-PENDING gate: 4/4 through scripts/vision-bench.py --cases (a Pix scam table read for two values and three labels, a portrait for glasses and hair and clothing colour, a Bart drawing for the character and the background emojis), median 2.5 s. They stay outside the repository because one is a photograph of the Operator."
+      ]
+    },
     {
       "experiment_id": "corpus_answer_judge_advisory",
       "recorded_on": "2026-09-23",
@@ -2768,7 +2858,7 @@
     },
     {
       "id": "vision_tool_enablement",
-      "status": "required_before_default_enablement",
+      "status": "promoted_enabled_by_default",
       "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [

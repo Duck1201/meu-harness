@@ -22,10 +22,11 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 - **Scrapling na coleta de Corpus**: limpeza de conteúdo oculto e rota de browser
   por sintoma com o EgressGuard em toda requisição, ambos desligados até medição
   ([ADR-0014](docs/adr/0014-corpus-browser-route-scrapling.md)).
-- **Visão local, desligada até medição**: `describe_image` lê uma imagem do
-  Workspace e pergunta ao Qwen3.5-2B local, fixado por digest; só texto volta,
-  com aviso de incerteza. 9/9 na bancada de `evals/vision` a temperatura 0
-  ([ADR-0016](docs/adr/0016-local-vision-tool.md)).
+- **Visão local, ligada**: `describe_image` lê uma imagem do Workspace e pergunta
+  ao Qwen3.5-2B local, fixado por digest; só texto volta, com aviso de incerteza.
+  9/9 na bancada de `evals/vision` a temperatura 0, 4/4 em prints reais do
+  Operator e 50/50 na promoção ([ADR-0016](docs/adr/0016-local-vision-tool.md)).
+  `vision-bench.py --cases` mede casos guardados fora do repositório.
 - **Juiz consultivo do Corpus, ligado**: Qwen3-Reranker-0.6B via Ollama anota se
   cada passagem traz o fato pedido e avisa o modelo quando nenhuma traz. Promovido
   com 49/50 contra 45/50 e `unsupported_claims` 0 contra 1; exige

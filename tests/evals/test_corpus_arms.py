@@ -11,7 +11,14 @@ from typing import cast
 
 import pytest
 
-from harness import TerminalOutcomeKind, ToolCall, ToolResult, ToolResultStatus, load_config
+from harness import (
+    HarnessConfig,
+    TerminalOutcomeKind,
+    ToolCall,
+    ToolResult,
+    ToolResultStatus,
+    load_config,
+)
 from harness.evals import (
     EvalCaseSpec,
     EvalTier,
@@ -42,6 +49,18 @@ def _fixtures() -> dict[str, RegressionFixture]:
         contract_root=root,
     )
     return {fixture.id: fixture for fixture in catalog.dataset.fixtures}
+
+
+def _config_without_vision() -> HarnessConfig:
+    """O contrato com a visão desligada: estes runners não montam runtime de visão.
+
+    Com `vision.mode` ligado no contrato, o runner exige o runtime, e medir sem ele
+    com o rótulo de com visão é o erro que a guarda existe para impedir.
+    """
+    config = load_config()
+    return config.model_copy(
+        update={"vision": config.vision.model_copy(update={"mode": "disabled"})}
+    )
 
 
 def _spec(fixture: RegressionFixture, **settings: object) -> EvalCaseSpec:
@@ -81,7 +100,7 @@ class _FlatEstimator:
 def _run(fixture: RegressionFixture, *, answer: str, **settings: object):
     runtime = _AnswerRuntime(answer)
     runner = ModelCaseRunner(
-        config=load_config(),
+        config=_config_without_vision(),
         runtime=runtime,
         estimator=_FlatEstimator(),
         operator_notes="",
@@ -335,7 +354,7 @@ def test_the_judge_arm_reaches_the_model_and_the_plain_arm_does_not() -> None:
     def run(**settings: object) -> _AnswerRuntime:
         runtime = _AnswerRuntime("O acervo não diz.")
         runner = ModelCaseRunner(
-            config=load_config(),
+            config=_config_without_vision(),
             runtime=runtime,
             estimator=_FlatEstimator(),
             operator_notes="",

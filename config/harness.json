@@ -6,7 +6,7 @@
   "runtime_profiles": "config/model-profiles.json",
   "tool_registry": "config/tool-registry.json",
   "vision": {
-    "mode": "disabled",
+    "mode": "enabled",
     "ollama_tag": "qwen3.5:2b-q4_K_M",
     "ollama_digest": "124a03c347777e8e4e5955c33610ae01d9d90d8c2a718bfba069c498d5c7f3c9",
     "max_image_bytes": 10485760,
