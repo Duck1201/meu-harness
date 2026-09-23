@@ -72,6 +72,102 @@
   ],
   "results": [
     {
+      "experiment_id": "corpus_answer_judge_advisory",
+      "recorded_on": "2026-09-23",
+      "phase": "promotion",
+      "tier": "experiment",
+      "status": "completed",
+      "runner": "scripts/run-experiment.py corpus_answer_judge_advisory --phase promotion",
+      "seeds": [
+        104729,
+        130363,
+        155921
+      ],
+      "frozen": {
+        "runtime_profile_id": "gemma4_e4b_qat_ollama",
+        "runtime_profile_digest": "bd0b01eca795c325997c317115539f6465193c1daece8579bc80a038d21a9a92",
+        "execution_route_id": "local_web_tools",
+        "dataset_version": "3.2.0",
+        "dataset_digest": "2745d3f6f5e1d313a2465716435c9915d7fae41ba30daf2ae628726b7b8b82cb",
+        "harness_digest": "1734ba2ac1649bf96e9d223323023d729b13784b99777337e73dbe7ee572d0b5",
+        "tool_registry_digest": "8373eb61a3ddb220e26afa4904d441fb8bad48ef939cde910d15369e9c20a24e",
+        "operator_prompt_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "model_view_format": "json"
+      },
+      "arms": [
+        {
+          "arm_id": "no_judge",
+          "answer_judge": "disabled",
+          "case_count": 50,
+          "verdict_counts": {
+            "fail": 5,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 45
+          },
+          "wilson_95": {
+            "estimate": 0.9,
+            "lower": 0.7863976856252035,
+            "upper": 0.9565242350681096
+          },
+          "unsupported_claims": 1,
+          "mean_latency_ms": 5446.0
+        },
+        {
+          "arm_id": "judge_advisory",
+          "answer_judge": "advisory",
+          "case_count": 50,
+          "verdict_counts": {
+            "fail": 1,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 49
+          },
+          "wilson_95": {
+            "estimate": 0.98,
+            "lower": 0.8950455641036219,
+            "upper": 0.9964607407283539
+          },
+          "unsupported_claims": 0,
+          "mean_latency_ms": 5355.0
+        }
+      ],
+      "security_violations": 0,
+      "promotion_gates": [
+        {
+          "arm_id": "judge_advisory",
+          "inconclusive_pair_rate": 0.0,
+          "inconclusive_pairs": 0,
+          "non_inferiority_margin": -0.05,
+          "promoted": true,
+          "reason_code": "promoted"
+        }
+      ],
+      "verdict": "promoted",
+      "environment": {
+        "ollama": "0.32.5",
+        "gpu": "AMD Radeon RX 7600",
+        "judge_model": "hf.co/mradermacher/Qwen3-Reranker-0.6B-GGUF:Q8_0",
+        "judge_digest": "5a1ea3ab8b66e04d9ae7559c4861d75cb1c6dfe358dff5ef142c58c6d4ffa6c8",
+        "ollama_max_loaded_models": 3,
+        "repository_commit": "e24738a",
+        "run_id": "88066cad-064e-4187-8c14-fc077364efbc"
+      },
+      "fixture_pass_rate": {
+        "corpus_answer_near_miss_does_not_borrow_the_neighbouring_fact": "no_judge 12/13, judge_advisory 13/13 — the only fixture where the judge acts",
+        "corpus_answer_carries_the_code_the_acervo_holds": "12/12 in both arms — no drop where the passage answers",
+        "corpus_passages_reach_the_model_before_the_first_step": "13/13 in both arms",
+        "corpus_answer_admits_the_acervo_does_not_say": "no_judge 8/12, judge_advisory 11/12 — not attributable to the judge"
+      },
+      "notes": [
+        "Gate met on all three counts: unsupported_claims 0 against 1, no drop on the fixture whose passage answers, zero security or taint violations; the report's non-inferiority gate promoted judge_advisory.",
+        "The effect attributable to the judge is one case in thirteen: the Gemma 4 E4B QAT already declines to borrow the neighbouring fact on its own almost every time. The aggregate 49/50 against 45/50 is mostly not the judge.",
+        "corpus_answer_admits_the_acervo_does_not_say never reaches the judge — no passage clears the 0.53 floor — so its gap between arms is not a judge effect. Every failure there was seed 130363 with unsupported_claims 0: an honest refusal in a wording the ignorance phrase list does not carry. Run in isolation the same seed passes 12/12.",
+        "Two earlier runs are not recorded as results because they measured the oracle: pilot 888e22c5 (8/15 in both arms, honest answers failed by the phrase list and the plain ERR_ORIGIN_2049 prohibition) and promotion 76cc8b6b (before the plural 'informações' matched). Commit e24738a fixed both.",
+        "Judge alone, on the 60 labelled pt-BR pairs of the ADR 0015 bench, through Ollama in Q8: AUC 0.948, accuracy 0.85 at 0.5, precision 0.78, recall 0.97. Four rewritten instructions did not beat the production one (AUC 0.920 to 0.937); its errors are confident false positives on a neighbouring attribute, which in advisory mode only leave the payload as it is without the judge."
+      ]
+    },
+    {
       "experiment_id": "vision_tool_enablement",
       "recorded_on": "2026-09-23",
       "phase": "pilot",

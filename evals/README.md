@@ -159,6 +159,10 @@ Medição que escolheu o juiz de [ADR-0015](../docs/adr/0015-corpus-answer-judge
 | Kev-0.8B | CPU | 63% | 0,817 | ~3 s |
 | Laya multilingual | CPU | 70% | 0,703 | 0,6 s |
 
+Reescrever a instrução não melhora o juiz escolhido (2026-09-23, mesmos 60 pares, Ollama Q8). As variantes testadas foram em inglês, "nem fato vizinho", "mesmo sujeito, unidade e período" e com exemplos; a AUC ficou entre 0,920 e 0,937, contra 0,948 da instrução de produção. Os erros são falsos positivos confiantes (0,9 a 1,0) em atributo vizinho: "a cada 6 h" para "por quanto tempo são mantidos", "por minuto" para "por dia". Prefixar a trilha de títulos à passagem piora: na fixture de quase-acerto, a passagem sozinha dá 0,03 e com títulos dá 0,43. No modo consultivo, falso positivo só deixa o payload como está sem juiz; o erro caro é o falso negativo, e o recall é 0,97.
+
+Na bancada fim a fim, a promoção de `corpus_answer_judge_advisory` passou no gate com 49/50 contra 45/50 e `unsupported_claims` 0 contra 1. O efeito atribuível ao juiz é um caso em 13 na fixture de quase-acerto; o resto da diferença está numa fixture em que o juiz não roda. O detalhe está em `experiments.json#results`.
+
 ## Bancada de visão
 
 As imagens de [`evals/vision/`](vision/) medem o modelo de visão de
