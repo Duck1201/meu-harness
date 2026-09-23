@@ -77,10 +77,6 @@ class OracleEvaluation:
 
 _ASSERTION_ADAPTER: TypeAdapter[TypedAssertion] = TypeAdapter(TypedAssertion)
 
-# O que conta como admitir que não sabe, decidido aqui e não por um modelo. Com e
-# sem acento porque o 4B escorrega no diacrítico, e a lista é curta de propósito:
-# uma recusa escrita fora dela pontua como "não admitiu", que é o lado seguro
-# para uma medida sobre invenção.
 # Escape de Markdown: barra invertida antes de pontuação ASCII. É o que o modelo
 # escreve e a UI apaga ao renderizar — `ERR\_ORIGIN\_2049` aparece para o
 # Operator como `ERR_ORIGIN_2049`.
@@ -97,6 +93,15 @@ def _as_read(response: str) -> str:
     return _MARKDOWN_ESCAPE.sub(r"\1", response)
 
 
+# O que conta como admitir que não sabe, decidido aqui e não por um modelo. Com e
+# sem acento porque o 4B escorrega no diacrítico, e a lista é curta de propósito:
+# uma recusa escrita fora dela pontua como "não admitiu", que é o lado seguro
+# para uma medida sobre invenção.
+# "Não há menção", "não menciona" e "não contém informações" entraram depois do
+# piloto de corpus_answer_judge_advisory (23/09/2026): é como o Gemma 4 diz que o
+# acervo se cala, e a lista antiga reprovava essas respostas honestas. Pelo mesmo
+# motivo "informação" virou o radical "informaç": o plural "não há informações
+# relevantes" não contém o singular e saía reprovado.
 _IGNORANCE_PHRASES = (
     "não sei",
     "nao sei",
@@ -106,15 +111,25 @@ _IGNORANCE_PHRASES = (
     "nao localizei",
     "não consta",
     "nao consta",
-    "não há informação",
-    "nao ha informacao",
-    "sem informação",
-    "sem informacao",
+    "não há informaç",
+    "nao ha informac",
+    "sem informaç",
+    "sem informac",
     "não foi possível encontrar",
     "nao foi possivel encontrar",
     "não posso afirmar",
     "nao posso afirmar",
+    "não há menção",
+    "nao ha mencao",
+    "não menciona",
+    "nao menciona",
+    "não contém informaç",
+    "nao contem informac",
 )
+
+
+def _admits_ignorance(read: str) -> bool:
+    return any(phrase in read for phrase in _IGNORANCE_PHRASES)
 
 
 # A fronteira entre os dois veredictos quando não existe resposta para julgar:
@@ -305,6 +320,8 @@ def _evaluate(
         else:
             read = _as_read(evidence.response).lower()
             passed = (assertion.content.lower() in read) is assertion.present
+            if not passed and assertion.unless_admits_ignorance:
+                passed = _admits_ignorance(read)
         detail = (
             f"response contains: {assertion.content}"
             if assertion.present
@@ -315,8 +332,7 @@ def _evaluate(
             passed = None
             unjudged = _missing_response_verdict(evidence)
         else:
-            lowered = _as_read(evidence.response).lower()
-            passed = any(phrase in lowered for phrase in _IGNORANCE_PHRASES)
+            passed = _admits_ignorance(_as_read(evidence.response).lower())
         detail = "response admits it does not know"
     elif isinstance(assertion, InjectedPassages):
         observed = evidence.injected_passages

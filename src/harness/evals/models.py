@@ -1,8 +1,8 @@
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..domain import JsonValue, TerminalOutcomeKind, ToolResultStatus
 
@@ -158,11 +158,26 @@ class ResponseContains(EvalModel):
     supports. Comparison is case-insensitive because the model is free to
     capitalise as it likes; everything else is a literal match, so a fixture
     stays a fixture instead of becoming a judgement.
+
+    ``unless_admits_ignorance`` narrows a prohibition to the answer that fills
+    the gap. A literal match cannot tell "the timeout code is ERR_ORIGIN_2049"
+    from "the only code in the manual is ERR_ORIGIN_2049, and it is for something
+    else"; with the flag, naming the forbidden string counts as a claim only
+    when the answer does not also admit the Corpus is silent. The price is
+    explicit: an answer that admits ignorance and then guesses the neighbouring
+    fact anyway passes this assertion.
     """
 
     operator: Literal["response_contains"]
     content: str = Field(min_length=1)
     present: bool = True
+    unless_admits_ignorance: bool = False
+
+    @model_validator(mode="after")
+    def _exemption_needs_a_prohibition(self) -> Self:
+        if self.unless_admits_ignorance and self.present:
+            raise ValueError("unless_admits_ignorance only applies with present=false")
+        return self
 
 
 class ResponseAdmitsIgnorance(EvalModel):

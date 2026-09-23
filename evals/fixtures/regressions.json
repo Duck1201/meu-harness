@@ -2,7 +2,7 @@
   "schema_version": 2,
   "dataset_id": "harness_2_contract_regressions",
   "dataset_version": "3.2.0",
-  "dataset_digest_sha256": "57f0c38c8dfaaee286bc2579e3bf0c65ece7f0bbbca0d28e13de098d8cc28be5",
+  "dataset_digest_sha256": "2745d3f6f5e1d313a2465716435c9915d7fae41ba30daf2ae628726b7b8b82cb",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -905,14 +905,16 @@
         "max_tool_calls": 2,
         "typed_assertions": [
           {"operator": "response_admits_ignorance"},
-          {"operator": "response_contains", "content": "ERR_ORIGIN_2049", "present": false},
+          {"operator": "response_contains", "content": "ERR_ORIGIN_2049", "present": false, "unless_admits_ignorance": true},
           {"operator": "response_contains", "content": "504", "present": false}
         ],
         "explanation": [
           "the proxy passage clears the bge-m3 floor for this question (0.576 against 0.53, measured 2026-09-22) and still says nothing about timeouts",
           "ERR_ORIGIN_2049 is the neighbouring fact: an error code from the same passage, for a refusal, not a timeout — borrowing it is invention wearing a citation",
           "504 is what world knowledge offers for a gateway timeout, the other shape of the same failure",
-          "unlike corpus_answer_admits_the_acervo_does_not_say, a passage reaches the model here, so an answer judge that reads each passage has something to judge"
+          "unlike corpus_answer_admits_the_acervo_does_not_say, a passage reaches the model here, so an answer judge that reads each passage has something to judge",
+          "naming ERR_ORIGIN_2049 to rule it out is not borrowing it: in the corpus_answer_judge_advisory pilot of 2026-09-23 the Gemma 4 E4B QAT answered 'there is no mention of a timeout code; the only error mentioned is ERR_ORIGIN_2049, for an origin outside the allowlist' in every seed, with and without the judge, and the plain prohibition failed all of them — so the code counts as a claim only when the answer does not admit the Corpus is silent",
+          "504 stays a plain prohibition: no honest answer about this manual needs it"
         ]
       }
     },

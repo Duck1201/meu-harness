@@ -34,6 +34,11 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 - O oráculo de eval lê a resposta como o Operator a vê: escape de Markdown
   (`ERR\_ORIGIN\_2049`) reprovava resposta certa e aprovava invenção.
+- O oráculo de eval reprovava respostas honestas do Corpus. "Não há menção",
+  "não menciona" e "não contém informações" contam como admitir ignorância, e
+  `response_contains` ganhou `unless_admits_ignorance`: citar o fato vizinho
+  para descartá-lo deixou de contar como tomá-lo emprestado. O Gemma respondia
+  certo à fixture de quase-acerto em todas as seeds e saía reprovado.
 - Automações internas chegam no papel que o template do perfil lê
   (`internal_automation_role`); o do Gemma descartava a recuperação do Corpus.
 - O motor deixou de fixar `think=True` e as marcas de vazamento do Qwen; o runner

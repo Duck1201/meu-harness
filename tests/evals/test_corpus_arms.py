@@ -237,6 +237,72 @@ def test_admitting_ignorance_is_a_phrase_list_and_says_so() -> None:
     assert invents.verdict is TaskVerdict.FAIL
 
 
+# Respostas do Gemma 4 E4B QAT no piloto de corpus_answer_judge_advisory
+# (23/09/2026), as duas honestas e as duas reprovadas pelo oráculo de então.
+_HONEST_NEAR_MISS = (
+    'Com base no trecho do "Manual do servidor" fornecido, não há menção ao código de '
+    "erro específico para quando o proxy estoura o tempo limite (timeout). O único erro "
+    "mencionado é `ERR_ORIGIN_2049`, que ocorre quando a origem está fora da *allowlist*."
+)
+_HONEST_SILENT_ACERVO = (
+    "O manual fornecido não contém informações sobre em qual porta o servidor de e-mail escuta."
+)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        _HONEST_NEAR_MISS,
+        _HONEST_SILENT_ACERVO,
+        "Não há informações relevantes sobre a porta de escuta do servidor de e-mail neste manual.",
+    ],
+)
+def test_the_ways_the_model_actually_admits_ignorance_count(response: str) -> None:
+    evaluation = evaluate_oracle(
+        [ResponseAdmitsIgnorance(operator="response_admits_ignorance")],
+        EvalEvidence(response=response),
+    )
+
+    assert evaluation.verdict is TaskVerdict.PASS
+
+
+def test_naming_the_neighbouring_fact_to_rule_it_out_is_not_borrowing_it() -> None:
+    # Substring não separa "o código de timeout é ERR_ORIGIN_2049" de "o único
+    # código do manual é ERR_ORIGIN_2049, e é de outra coisa". Com
+    # `unless_admits_ignorance`, a menção só conta como alegação quando a resposta
+    # não admite que o acervo se cala.
+    forbidden = ResponseContains(
+        operator="response_contains",
+        content="ERR_ORIGIN_2049",
+        present=False,
+        unless_admits_ignorance=True,
+    )
+    ruled_out = evaluate_oracle([forbidden], EvalEvidence(response=_HONEST_NEAR_MISS))
+    borrowed = evaluate_oracle(
+        [forbidden],
+        EvalEvidence(response="Quando o proxy estoura o tempo limite, o erro é ERR_ORIGIN_2049."),
+    )
+
+    assert ruled_out.verdict is TaskVerdict.PASS
+    assert unsupported_claims(ruled_out) == 0
+    assert borrowed.verdict is TaskVerdict.FAIL
+    assert unsupported_claims(borrowed) == 1
+
+
+def test_the_plain_prohibition_still_counts_any_mention() -> None:
+    evaluation = evaluate_oracle(
+        [ResponseContains(operator="response_contains", content="ERR_ORIGIN_2049", present=False)],
+        EvalEvidence(response=_HONEST_NEAR_MISS),
+    )
+
+    assert evaluation.verdict is TaskVerdict.FAIL
+
+
+def test_the_exemption_only_makes_sense_for_a_prohibition() -> None:
+    with pytest.raises(ValueError, match="unless_admits_ignorance"):
+        ResponseContains(operator="response_contains", content="8899", unless_admits_ignorance=True)
+
+
 def test_no_retrieval_at_all_is_not_an_acervo_that_answered_nothing() -> None:
     never_ran = evaluate_oracle(
         [InjectedPassages(operator="injected_passages", minimum=1)],
