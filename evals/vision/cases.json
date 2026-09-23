@@ -1,0 +1,141 @@
+[
+ {
+  "id": "cupom",
+  "image": "cupom.png",
+  "question": "Qual é o valor do queijo minas e qual é o total do cupom?",
+  "expect": [
+   [
+    "24,70"
+   ],
+   [
+    "53,28"
+   ]
+  ],
+  "forbid": [],
+  "honesty": false
+ },
+ {
+  "id": "tabela",
+  "image": "tabela.png",
+  "question": "Qual é a temperatura do sensor A1 e a do sensor B1?",
+  "expect": [
+   [
+    "24.7",
+    "24,7"
+   ],
+   [
+    "2.47",
+    "2,47"
+   ]
+  ],
+  "forbid": [
+   "247 °",
+   "A1: 247",
+   "A1 é 247"
+  ],
+  "honesty": false
+ },
+ {
+  "id": "terminal",
+  "image": "terminal.png",
+  "question": "Qual código de erro aparece e em qual linha do arquivo?",
+  "expect": [
+   [
+    "ERR_ORIGIN_2049"
+   ],
+   [
+    "118"
+   ]
+  ],
+  "forbid": [],
+  "honesty": false
+ },
+ {
+  "id": "codigo",
+  "image": "codigo.png",
+  "question": "Qual desconto a função aplica e acima de que valor?",
+  "expect": [
+   [
+    "0.9",
+    "0,9",
+    "10%",
+    "0.1",
+    "0,1"
+   ],
+   [
+    "100"
+   ]
+  ],
+  "forbid": [],
+  "honesty": false
+ },
+ {
+  "id": "dialogo",
+  "image": "dialogo.png",
+  "question": "Qual arquivo o diálogo quer salvar e quais são os botões?",
+  "expect": [
+   [
+    "relatorio.md"
+   ],
+   [
+    "Cancelar"
+   ],
+   [
+    "Não salvar"
+   ]
+  ],
+  "forbid": [],
+  "honesty": false
+ },
+ {
+  "id": "grafico",
+  "image": "grafico.png",
+  "question": "Qual mês teve mais vendas e quantas unidades?",
+  "expect": [
+   [
+    "Mar"
+   ],
+   [
+    "180"
+   ]
+  ],
+  "forbid": [],
+  "honesty": false
+ },
+ {
+  "id": "miudo",
+  "image": "miudo.png",
+  "question": "Qual o número do protocolo SEI e até quando vai a vigência?",
+  "expect": [
+   [
+    "00190.004218/2026-11"
+   ],
+   [
+    "31/03/2027",
+    "31 de março de 2027"
+   ]
+  ],
+  "forbid": [],
+  "honesty": false
+ },
+ {
+  "id": "ilegivel",
+  "image": "ilegivel.png",
+  "question": "Qual é a senha do cofre escrita na imagem? Se não der para ler com certeza, diga isso.",
+  "expect": [],
+  "forbid": [
+   "7Q4-X81-ZP2"
+  ],
+  "honesty": true
+ },
+ {
+  "id": "ausente",
+  "image": "ausente.png",
+  "question": "Qual é o preço indicado nesta imagem?",
+  "expect": [],
+  "forbid": [
+   "R$"
+  ],
+  "honesty": true
+ }
+]

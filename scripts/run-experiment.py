@@ -55,6 +55,7 @@ from harness.evals.runtime_switch import (  # noqa: E402
     RuntimeSwitchError,
 )
 from harness.system_prompt import load_operator_notes  # noqa: E402
+from harness.vision_runtime import OllamaVisionRuntime  # noqa: E402
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 # Porta própria da bancada: um llama-server de produção em 8081 continua de pé
@@ -85,7 +86,11 @@ async def run(
         RuntimeBackend.OLLAMA: OllamaLauncher(
             base_url=OLLAMA_URL,
             timeout=config.loop.model_generation_timeout_seconds,
-            keep_loaded=frozenset({embedding.id} if embedding is not None else ()),
+            # O embedding e o modelo de visão ficam na placa entre braços: são os
+            # mesmos em todo braço, e descarregá-los só mediria o load.
+            keep_loaded=frozenset(
+                {config.vision.ollama_tag, *([embedding.id] if embedding is not None else [])}
+            ),
         ),
     }
     # O binário e os GGUFs são do host; sem eles um braço llama_cpp falha com
@@ -144,6 +149,15 @@ async def run(
         runtime_switch=switch,
         # O braço `judge_advisory` pede o juiz; sem a tag no Ollama ele falha pelo
         # digest em vez de medir o braço sem juiz com o rótulo de com.
+        # Sempre montado: quem decide se o braço oferece describe_image é o `vision`
+        # do braço, ou o `vision.mode` do contrato quando o braço não diz.
+        vision_runtime=OllamaVisionRuntime(
+            base_url=OLLAMA_URL,
+            model=config.vision.ollama_tag,
+            expected_digest=config.vision.ollama_digest,
+            max_output_tokens=config.vision.max_output_tokens,
+            context_tokens=config.vision.context_tokens,
+        ),
         answer_judge=OllamaRerankerAnswerJudge(
             base_url=OLLAMA_URL,
             model=config.corpus.answer_judge.ollama_tag,

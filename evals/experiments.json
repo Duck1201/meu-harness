@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "f7103d147f2a7561ccb3cee5063423b5c7c09413d45df26a755e97973540b5fc",
+  "manifest_digest_sha256": "3f362df10a97b8ef6c6612bd91393db31f6a8204cc337ae31d3f64e2a8b23864",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -17,8 +17,8 @@
   "dataset": {
     "path": "evals/fixtures/regressions.json",
     "dataset_id": "harness_2_contract_regressions",
-    "dataset_version": "3.1.0",
-    "dataset_digest_sha256": "1008eced2d2d89119c9a993d36d50d9c64964cfe03efc6c6b83ce53af36c446b"
+    "dataset_version": "3.2.0",
+    "dataset_digest_sha256": "57f0c38c8dfaaee286bc2579e3bf0c65ece7f0bbbca0d28e13de098d8cc28be5"
   },
   "contract_digests": {
     "model_profiles_sha256": "b45364619167200a80b4bf3de47f833e3ea909247928d7815349d7948c8de927",
@@ -2604,6 +2604,30 @@
         }
       ],
       "promotion_gate": "Advisory mode is enabled only with fewer unsupported_claims than no_judge, no drop in task success on the fixtures whose passage does answer, and zero security or taint violations. The judge never blocks or rewrites an answer; it only annotates passages."
+    },
+    {
+      "id": "vision_tool_enablement",
+      "status": "required_before_default_enablement",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
+      "execution_route": "local_web_tools",
+      "fixture_tags": [
+        "vision"
+      ],
+      "fixed": {
+        "vision_model": "qwen3.5:2b-q4_K_M",
+        "vision_effect": "local_inference"
+      },
+      "arms": [
+        {
+          "id": "vision_off",
+          "vision": "disabled"
+        },
+        {
+          "id": "vision_on",
+          "vision": "enabled"
+        }
+      ],
+      "promotion_gate": "vision.mode becomes enabled only if vision_on passes describe_image_reads_the_number_it_is_asked and keeps vision_is_not_silently_available and the executor contract, with zero security or taint violations, and evals/vision records the reading accuracy of the pinned vision model on its exact digest."
     }
   ]
 }

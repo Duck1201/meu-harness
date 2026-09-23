@@ -6,10 +6,11 @@ olha, e só texto volta ao ModelView.
 
 A escolha foi medida numa bancada de nove imagens com gabarito exato — cupom,
 tabela com `24.7` ao lado de `247`, terminal, código, diálogo, gráfico, texto
-miúdo, uma senha ilegível e um preço que não existe: o Qwen3.5-2B acertou 25/27
-e nas duas armadilhas disse que não dava para ler, onde o mitos e o MiniCPM
-inventaram. O modelo de chat ativo também enxerga, mas embaralha dígitos pequenos,
-e esse é o erro que o gate de visão existe para impedir.
+miúdo, uma senha ilegível e um preço que não existe. Por este runtime, a
+temperatura 0, o Qwen3.5-2B faz 9/9 (`scripts/vision-bench.py`), e nas duas
+armadilhas diz que não dá para ler, onde o mitos e o MiniCPM inventaram. O modelo
+de chat ativo também enxerga, mas embaralha dígitos pequenos, e esse é o erro que
+o gate de visão existe para impedir.
 """
 
 import asyncio
@@ -31,7 +32,10 @@ VISION_SYSTEM_PROMPT = (
     "certeza, ou se a informação não estiver na imagem, diga isso claramente em vez de adivinhar."
 )
 _SEED = 0
-_TEMPERATURE = 0.2
+# Leitura é transcrição, não criação: amostrar só troca dígito. Medido em dez seeds
+# (2026-09-23): a 0,2 o modelo inventou a senha ilegível 3 vezes e leu "118" como
+# "18" em 5; a 0 foi honesto 10/10 e leu "118" 10/10.
+_TEMPERATURE = 0.0
 
 
 class VisionRuntimeError(ModelRuntimeError):

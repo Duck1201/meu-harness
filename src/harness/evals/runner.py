@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -14,6 +15,7 @@ from ..corpus_ingestion import build_document, embeddable_texts, extract, source
 from ..corpus_service import CorpusLibrary, CorpusRetriever
 from ..corpus_tools import CorpusToolExecutor
 from ..domain import (
+    LOCAL_INFERENCE_EFFECT,
     CanonicalHistoryEntry,
     CanonicalHistoryEntryKind,
     Grant,
@@ -37,7 +39,9 @@ from ..ports import (
     TextTokenCounter,
     ToolBatchPreflight,
     ToolSchema,
+    VisionAnswer,
 )
+from ..vision_tools import VisionToolExecutor
 from ..web_tools import WebToolExecutor
 from .models import EvalTier, RegressionFixture, TaskVerdict
 from .oracles import EvalEvidence, OracleEvaluation, evaluate_oracle
@@ -73,6 +77,14 @@ class CaseRunner(Protocol):
     async def run_case(self, spec: EvalCaseSpec) -> CaseRunResult: ...
 
 
+class _ContractVision:
+    """Modelo de visão dublê: responde sempre, e diz quantos bytes recebeu."""
+
+    async def describe(self, image: bytes, question: str) -> VisionAnswer:
+        del question
+        return VisionAnswer(text=f"contract reading of {len(image)} bytes", latency_ms=0.0)
+
+
 class ContractCaseRunner:
     _SUPPORTED_TYPES = frozenset(
         {
@@ -90,6 +102,7 @@ class ContractCaseRunner:
         # soltos em cada chamador seriam duas chances de divergir.
         self._registry = config.tool_registry
         self._context = config.context
+        self._vision = config.vision
 
     def supports(self, fixture_type: str) -> bool:
         return fixture_type in self._SUPPORTED_TYPES
@@ -146,6 +159,7 @@ class ContractCaseRunner:
                 )
             else:
                 calls = _fixture_calls(spec.fixture)
+                seed_workspace(workspace, stimulus.get("workspace"))
                 executor = RegistryToolExecutor(
                     registry=self._registry,
                     workspace_root=workspace,
@@ -153,7 +167,27 @@ class ContractCaseRunner:
                     max_read_bytes=self._context.max_tool_read_bytes,
                     max_search_bytes=self._context.max_tool_search_bytes,
                 )
-                results = tuple([await executor.execute(call) for call in calls])
+                # Pelo efeito, como em produção: local_inference vai para o executor
+                # de visão, aqui com um modelo dublê — o contrato é do executor
+                # (caminho, teto, formato, envelope), não da leitura.
+                vision = VisionToolExecutor(
+                    registry=self._registry,
+                    workspace_root=workspace,
+                    session_policy=_contract_policy(),
+                    runtime=_ContractVision(),
+                    config=self._vision,
+                )
+                effects = self._registry.effects_by_tool
+                results = tuple(
+                    [
+                        await (
+                            vision
+                            if LOCAL_INFERENCE_EFFECT in effects.get(call.name, ())
+                            else executor
+                        ).execute(call)
+                        for call in calls
+                    ]
+                )
                 evidence = _evidence(
                     workspace=workspace,
                     calls=calls,
@@ -332,6 +366,51 @@ def _corpus_policy(corpus_id: str | None) -> SessionPolicy:
             ),
         ),
     )
+
+
+def seed_workspace(workspace: Path, entries: JsonValue) -> None:
+    """Grava o Workspace que a fixture descreve, texto ou binário.
+
+    Uma entrada é "path conteúdo", {"path", "content"} ou {"path",
+    "content_base64"} — a última existe para describe_image, que lê bytes de uma
+    imagem e não teria o que ler num arquivo gravado como UTF-8.
+    """
+    if not isinstance(entries, Sequence) or isinstance(entries, str):
+        return
+    for raw in entries:
+        # Tem de virar arquivo de verdade, senão o modelo procura num diretório
+        # vazio e gira até o limite.
+        data: bytes
+        if isinstance(raw, str):
+            name, text = _split_seed_entry(raw)
+            data = text.encode("utf-8")
+        elif isinstance(raw, Mapping):
+            entry = cast(Mapping[str, JsonValue], raw)
+            raw_name = entry.get("path")
+            if not isinstance(raw_name, str):
+                continue
+            name = raw_name
+            encoded = entry.get("content_base64")
+            raw_content = entry.get("content")
+            if isinstance(encoded, str):
+                data = base64.b64decode(encoded, validate=True)
+            else:
+                data = (raw_content if isinstance(raw_content, str) else "").encode("utf-8")
+        else:
+            continue
+        if not name or Path(name).is_absolute() or ".." in Path(name).parts:
+            continue
+        target = workspace / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+
+
+def _split_seed_entry(entry: str) -> tuple[str, str]:
+    """Splits "src/app.js contains TODO: validate input" into path and content."""
+    path, separator, description = entry.partition(" ")
+    if not separator:
+        return entry.strip(), ""
+    return path.strip(), description.strip()
 
 
 def _contract_policy() -> SessionPolicy:

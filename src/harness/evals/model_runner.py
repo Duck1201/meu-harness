@@ -70,6 +70,7 @@ from .runner import (
     EvalCorpus,
     build_eval_corpus,
     security_violations,
+    seed_workspace,
 )
 
 _ALL_GRANTS = ("WorkspaceRootGrant", "WriteGrant", "WebAccessGrant")
@@ -787,38 +788,7 @@ def _bench_request(request: str, fixture: RegressionFixture, bench: BenchServer)
 
 
 def _seed_workspace(workspace: Path, fixture: RegressionFixture) -> None:
-    entries = fixture.stimulus.get("workspace")
-    if not isinstance(entries, Sequence) or isinstance(entries, str):
-        return
-    for raw in entries:
-        # A fixture describes its workspace either as "path" or as
-        # {"path": ..., "content": ...}; both have to produce a real file, or the
-        # model is asked to search an empty directory and loops until the limit.
-        if isinstance(raw, str):
-            name, content = _split_seed_entry(raw)
-        elif isinstance(raw, Mapping):
-            entry = cast(Mapping[str, JsonValue], raw)
-            raw_name = entry.get("path")
-            if not isinstance(raw_name, str):
-                continue
-            raw_content = entry.get("content")
-            name = raw_name
-            content = raw_content if isinstance(raw_content, str) else ""
-        else:
-            continue
-        if not name or Path(name).is_absolute() or ".." in Path(name).parts:
-            continue
-        target = workspace / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
-
-
-def _split_seed_entry(entry: str) -> tuple[str, str]:
-    """Splits "src/app.js contains TODO: validate input" into path and content."""
-    path, separator, description = entry.partition(" ")
-    if not separator:
-        return entry.strip(), ""
-    return path.strip(), description.strip()
+    seed_workspace(workspace, fixture.stimulus.get("workspace"))
 
 
 def _expected_calls(fixture: RegressionFixture) -> int:

@@ -158,3 +158,34 @@ Medição que escolheu o juiz de [ADR-0015](../docs/adr/0015-corpus-answer-judge
 | bge-reranker-v2-m3 | CPU | 86,7% | 0,920 | ~4 s |
 | Kev-0.8B | CPU | 63% | 0,817 | ~3 s |
 | Laya multilingual | CPU | 70% | 0,703 | 0,6 s |
+
+## Bancada de visão
+
+As imagens de [`evals/vision/`](vision/) medem o modelo de visão de
+`describe_image` ([ADR-0016](../docs/adr/0016-local-vision-tool.md)) no digest que
+`config/harness.json#vision` fixa, pelo mesmo runtime da produção:
+
+```bash
+uv run python scripts/vision-bench.py
+```
+
+São nove casos com gabarito exato: cupom com R$ 24,70, tabela com `24.7` ao lado
+de `247`, terminal com código e linha, código, diálogo, gráfico, texto miúdo, uma
+senha ilegível e um preço que não existe. Os dois últimos passam quando o modelo
+diz que não consegue ler. `make_images.py` regenera as imagens e o `cases.json`.
+
+Medição de 2026-09-23 (9 imagens × 3 seeds a temperatura 0,2, depois 9 a 0 pelo
+runtime):
+
+| Modelo | Acertos | Não inventa | Mediana |
+|---|---|---|---|
+| Qwen3.5-2B, temperatura 0 (runtime de produção) | 9/9 | 2/2 | 0,8 s |
+| Qwen3.5-2B, temperatura 0,2 | 25/27 | 6/6 nessas seeds, mas 7/10 em dez | 0,7 s |
+| GLM-OCR (só transcreve) | 21/21 | — | 4,4 s |
+| Gemma 4 E4B QAT (chat ativo) | 21/27 — embaralha dígitos pequenos | 6/6 | 1,0 s |
+| mitos | 21/27 | 0/6 — inventa senha e preço | 0,9 s |
+| MiniCPM-V 4.6 1B | 18/27 | 0/6 | 0,5 s |
+
+A temperatura decidiu: a 0,2 o Qwen3.5-2B inventou a senha ilegível em 3 de 10
+seeds e leu a linha `118` como `18` em 5; a 0 foi honesto e certo 10 de 10.
+

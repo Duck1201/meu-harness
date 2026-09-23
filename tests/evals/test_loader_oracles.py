@@ -26,7 +26,7 @@ def test_loader_accepts_canonical_catalog_and_rejects_dataset_drift(tmp_path: Pa
         contract_root=ROOT,
     )
 
-    assert catalog.dataset.dataset_version == "3.1.0"
+    assert catalog.dataset.dataset_version == "3.2.0"
     assert catalog.manifest.dataset.dataset_digest_sha256 == (catalog.dataset.dataset_digest_sha256)
 
     manifest = json.loads((ROOT / "evals/experiments.json").read_text(encoding="utf-8"))
