@@ -72,6 +72,125 @@
   ],
   "results": [
     {
+      "experiment_id": "runtime_profile_final_round",
+      "recorded_on": "2026-09-23",
+      "phase": "pilot",
+      "tier": "experiment",
+      "status": "completed",
+      "runner": "scripts/run-experiment.py runtime_profile_final_round --phase pilot",
+      "seeds": [
+        104729,
+        130363,
+        155921
+      ],
+      "frozen": {
+        "runtime_profile_id": "local_mitos_ollama_reproduction",
+        "runtime_profile_digest": "a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74",
+        "execution_route_id": "local_web_tools",
+        "dataset_version": "3.1.0",
+        "dataset_digest": "1008eced2d2d89119c9a993d36d50d9c64964cfe03efc6c6b83ce53af36c446b",
+        "harness_digest": "6a443252c3047ad594747d9cd6f525c672594bb896bd5a43759a9caae689030d",
+        "tool_registry_digest": "e1dbee48ce312924de041d3de7da7d3dd4b9f3e38be961df16618c5bbb53ff7c",
+        "operator_prompt_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "model_view_format": "json"
+      },
+      "arms": [
+        {
+          "arm_id": "mitos_control",
+          "runtime_profile_id": "local_mitos_ollama_reproduction",
+          "runtime_profile_digest": "a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74",
+          "case_count": 15,
+          "verdict_counts": {
+            "fail": 3,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 12
+          },
+          "mean_latency_ms": 8405.0
+        },
+        {
+          "arm_id": "gemma4_e4b_qat",
+          "runtime_profile_id": "gemma4_e4b_qat_ollama",
+          "runtime_profile_digest": "bd0b01eca795c325997c317115539f6465193c1daece8579bc80a038d21a9a92",
+          "case_count": 15,
+          "verdict_counts": {
+            "fail": 3,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 12
+          },
+          "mean_latency_ms": 6929.0
+        },
+        {
+          "arm_id": "neohorse_4b",
+          "runtime_profile_id": "neohorse_4b_ollama",
+          "runtime_profile_digest": "286cd51ba2308ae860bad4ec9aca2db388fa0fd1967fe92c34a3780e8c4573fa",
+          "case_count": 15,
+          "verdict_counts": {
+            "fail": 4,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 11
+          },
+          "mean_latency_ms": 7449.0
+        },
+        {
+          "arm_id": "qwen35_4b_official",
+          "runtime_profile_id": "qwen35_4b_ollama",
+          "runtime_profile_digest": "8d530fae4a1e86b011293d7663f8dcc65e5f406ec78f0290a2b8c81b74552fa9",
+          "case_count": 15,
+          "verdict_counts": {
+            "fail": 7,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 8
+          },
+          "mean_latency_ms": 7887.0
+        },
+        {
+          "arm_id": "lfm25_26b",
+          "runtime_profile_id": "lfm25_26b_ollama",
+          "runtime_profile_digest": "aa0f0a53d49efa85c2f3ca5a515105755e491e91d4a83b9d0f392d6c3e0ed4cc",
+          "case_count": 15,
+          "verdict_counts": {
+            "fail": 12,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 3
+          },
+          "mean_latency_ms": 5958.0
+        },
+        {
+          "arm_id": "nemotron3_nano_4b",
+          "runtime_profile_id": "nemotron3_nano_4b_ollama",
+          "runtime_profile_digest": "e49695a743f699ae63d1cefe6e108b6181ffa7b07dfbfbc91d32cf12224dfa28",
+          "case_count": 15,
+          "verdict_counts": {
+            "fail": 4,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 11
+          },
+          "mean_latency_ms": 7236.0
+        }
+      ],
+      "security_violations": 0,
+      "verdict": "no_challenger_clearly_ahead",
+      "environment": {
+        "ollama": "0.32.5",
+        "gpu": "AMD Radeon RX 7600",
+        "repository_commit": "bc20d3e"
+      },
+      "notes": [
+        "frozen names the control arm's profile; each Challenger carries its own in arms[].",
+        "No Challenger beats the control: mitos 12/15, gemma4_e4b_qat 12/15, neohorse_4b 11/15, nemotron3_nano_4b 11/15, qwen35_4b_official 8/15, lfm25_26b 3/15.",
+        "lfm25_26b fails mostly on absolute_path_not_allowed (9 of 12): it writes absolute paths the harness refuses by policy.",
+        "The official qwen3.5:4b is below its abliterated derivative here, so abliteration is not what holds mitos back on this bench.",
+        "With the Markdown-aware oracle and the user-role automation, gemma4 ties the control at lower latency (6.9 s against 8.4 s per case).",
+        "admits_the_acervo_does_not_say and the near-miss fixture fail in every arm."
+      ]
+    },
+    {
       "experiment_id": "runtime_profile_bakeoff_finalists",
       "recorded_on": "2026-09-23",
       "phase": "promotion",
