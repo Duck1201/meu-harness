@@ -8,7 +8,7 @@ from typing import Protocol, cast
 from .agent_engine import AgentEngine, ResponseMarkup
 from .brave_browser import BraveBrowserCapability, BraveEgressGuard
 from .composite_tools import CompositeToolExecutor
-from .config import CorpusScraperConfig, HarnessConfig, ToolRegistryConfig
+from .config import CorpusScraperConfig, HarnessConfig, ToolRegistryConfig, VisionConfig
 from .context_builder import ContextBuilder
 from .conversation_store import ConversationStore
 from .corpus_browser import ScraplingBrowserRenderer
@@ -25,6 +25,7 @@ from .corpus_tools import CorpusToolExecutor, granted_corpus_id
 from .domain import (
     CORPUS_EFFECT,
     CORPUS_GRANT,
+    LOCAL_INFERENCE_EFFECT,
     MUTATION_EFFECT,
     WAIVABLE_CONFIRMATION_REASONS,
     YOLO_CONFIRMATION_REASONS,
@@ -79,8 +80,10 @@ from .ports import (
     ToolExecutor,
     ToolExecutorFactory,
     ToolSchema,
+    VisionRuntime,
 )
 from .system_prompt import build_system_prompt
+from .vision_tools import VisionToolExecutor
 from .web_tools import BrowserCapability, BrowserEgressGuard, WebToolExecutor
 from .workspace_coordinator import WorkspaceCoordinator
 
@@ -141,6 +144,7 @@ class ApplicationService:
         corpus_directory: str | Path | None = None,
         embedder: EmbeddingRuntime | None = None,
         answer_judge: CorpusAnswerJudge | None = None,
+        vision_runtime: VisionRuntime | None = None,
     ) -> None:
         roots: list[Path] = []
         for candidate in allowed_workspace_roots:
@@ -252,7 +256,10 @@ class ApplicationService:
             browser_capability=browser_capability,
             browser_egress_guard=browser_egress_guard,
             corpus_retriever=self._corpus_retriever,
+            vision_runtime=vision_runtime,
+            vision_config=config.vision,
         )
+        self._vision_offered = vision_runtime is not None
         self._event_bus = _LiveEventBus()
         self._event_sink = _ServiceEventSink(self._event_bus, observability_store)
         self._confirmation_gate = OperatorConfirmationGate(self._event_sink, self.store)
@@ -734,6 +741,7 @@ class ApplicationService:
                 self.config,
                 today=datetime.now(UTC).date(),
                 operator_notes=self._operator_notes,
+                vision_tool_offered=self._vision_offered,
             ),
             tool_schemas=(),
             model_options={
@@ -849,9 +857,13 @@ class _ConversationToolExecutorFactory:
         browser_capability: BrowserCapability | None = None,
         browser_egress_guard: BrowserEgressGuard | None = None,
         corpus_retriever: CorpusRetriever | None = None,
+        vision_runtime: VisionRuntime | None = None,
+        vision_config: VisionConfig | None = None,
     ) -> None:
         self._store = store
         self._registry = registry
+        self._vision_runtime = vision_runtime
+        self._vision_config = vision_config or VisionConfig()
         self._workspace_root = workspace_root
         self._coordinator = coordinator
         self._search_endpoint = search_endpoint
@@ -883,6 +895,11 @@ class _ConversationToolExecutorFactory:
             for definition in self._registry.model_tools
             if definition.status == "enabled"
             and (self._corpus_retriever is not None or CORPUS_EFFECT not in definition.effects)
+            # O mesmo vale para a visão: sem o modelo configurado, describe_image
+            # só saberia responder unknown_tool.
+            and (
+                self._vision_runtime is not None or LOCAL_INFERENCE_EFFECT not in definition.effects
+            )
         )
 
     async def create(self, conversation_id: str) -> ToolExecutor:
@@ -918,6 +935,17 @@ class _ConversationToolExecutorFactory:
             if self._corpus_retriever is not None
             else None
         )
+        vision = (
+            VisionToolExecutor(
+                registry=registry,
+                workspace_root=root,
+                session_policy=policy,
+                runtime=self._vision_runtime,
+                config=self._vision_config,
+            )
+            if self._vision_runtime is not None
+            else None
+        )
         routes: dict[str, ToolExecutor] = {}
         for definition in registry.model_tools:
             # Pelo efeito declarado, nunca pelo nome: uma tool nova é roteada por
@@ -925,6 +953,10 @@ class _ConversationToolExecutorFactory:
             if CORPUS_EFFECT in definition.effects:
                 if corpus is not None:
                     routes[definition.name] = corpus
+                continue
+            if LOCAL_INFERENCE_EFFECT in definition.effects:
+                if vision is not None:
+                    routes[definition.name] = vision
                 continue
             routes[definition.name] = web if "data_egress" in definition.effects else local
         return CompositeToolExecutor(routes=routes)

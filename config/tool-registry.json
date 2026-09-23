@@ -404,6 +404,36 @@
         },
         "required": ["location"]
       }
+    },
+    {
+      "name": "describe_image",
+      "status": "enabled",
+      "effects": ["workspace_read", "local_inference"],
+      "required_grants": ["WorkspaceRootGrant"],
+      "description": "Asks a local vision model one question about a PNG, JPEG or WebP image in the workspace and returns its answer. Use it when the Operator refers to a screenshot, photo, receipt or chart file. The reading can be wrong on small text and digits.",
+      "replay_policy": "never_cache_workspace_reads",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Image path relative to the workspace root. Absolute paths and paths outside the workspace are rejected."
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "What to find in the image, as a specific question, e.g. 'What is the total on this receipt?'."
+          }
+        },
+        "required": ["file_path", "question"]
+      },
+      "executor_invariants": [
+        "The image is size-checked before a byte is read and identified by magic bytes, not by extension.",
+        "Image bytes never enter the result, telemetry or CanonicalHistory; the result carries the answer, a fixed caveat and the image digest, size, format and dimensions."
+      ]
     }
   ],
   "internal_automations": [
@@ -477,13 +507,8 @@
       "reason": "HTML extraction is InternalAutomation in the context layer."
     },
     {
-      "name": "describe_image",
-      "reason": "Vision is not released until the exact local profile passes its gate.",
-      "gate_document": "docs/RELEASE-PENDING.md"
-    },
-    {
       "name": "display_image",
-      "reason": "Vision is not released until the exact local profile passes its gate.",
+      "reason": "Showing an image to the Operator is UI, not a model tool; describe_image only reads.",
       "gate_document": "docs/RELEASE-PENDING.md"
     },
     {

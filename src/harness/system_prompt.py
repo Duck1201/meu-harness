@@ -68,6 +68,16 @@ _MODEL_FACING_LIMITS: Mapping[str, str] = {
 }
 
 
+# O que substitui a linha de visão quando describe_image está no catálogo: o
+# modelo de chat continua cego, mas agora tem a quem perguntar (ADR 0016).
+_VISION_TOOL_LINE = (
+    "You cannot see images yourself. When a request depends on an image file in the "
+    "workspace, ask describe_image a specific question about it, and pass on its caveat "
+    "when the answer depends on small text or digits. If there is no such file, say so "
+    "plainly instead of searching the web for it."
+)
+
+
 OPERATOR_MARKER = "<!-- OPERATOR -->"
 
 # ponytail: teto em caracteres, não em tokens — o estimator exige o tokenizer
@@ -111,7 +121,9 @@ def load_operator_notes(path: Path = Path("SYSTEM-PROMPT.md")) -> str:
     return stripped
 
 
-def build_system_prompt(config: HarnessConfig, *, today: date, operator_notes: str) -> str:
+def build_system_prompt(
+    config: HarnessConfig, *, today: date, operator_notes: str, vision_tool_offered: bool
+) -> str:
     """The prompt for the active RuntimeProfile, capability lines included.
 
     ``today`` has no default on purpose: a prompt that reads the clock by itself
@@ -120,10 +132,13 @@ def build_system_prompt(config: HarnessConfig, *, today: date, operator_notes: s
     reason ``operator_notes`` is required and never read from disk here: an empty
     string is a stated absence, and a bench run that forgot the Operator's text
     would measure a different system than the one the Operator runs.
+    ``vision_tool_offered`` is required for the same reason: whether describe_image
+    is in the catalogue depends on the host, and a line telling the model it cannot
+    see while the tool that sees is on offer would contradict the catalogue.
     """
     capabilities = config.runtime_profile.capabilities
     limits = [
-        sentence
+        _VISION_TOOL_LINE if name == "vision" and vision_tool_offered else sentence
         for name, sentence in _MODEL_FACING_LIMITS.items()
         if (capability := capabilities.get(name)) is None or capability.support != "supported"
     ]
@@ -141,7 +156,12 @@ def derived_prompt_mirror(config: HarnessConfig) -> str:
     O espelho é documentação: quem monta o prompt de verdade continua sendo
     ``build_system_prompt``, e é ela que este texto reproduz.
     """
-    prompt = build_system_prompt(config, today=_MIRROR_DATE, operator_notes="")
+    prompt = build_system_prompt(
+        config,
+        today=_MIRROR_DATE,
+        operator_notes="",
+        vision_tool_offered=config.vision.mode == "enabled",
+    )
     return prompt.replace(_MIRROR_DATE.isoformat(), _MIRROR_DATE_PLACEHOLDER)
 
 

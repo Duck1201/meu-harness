@@ -208,7 +208,9 @@ async def collect(seeds: Sequence[int], output: Path, tokenizer: Path) -> int:
     )
     fixtures = [item for item in catalog.dataset.fixtures if runner.supports(item.type)]
     offered = _offered_tools(config)
-    system_prompt = build_system_prompt(config, today=BENCH_DATE, operator_notes=operator_notes)
+    system_prompt = build_system_prompt(
+        config, today=BENCH_DATE, operator_notes=operator_notes, vision_tool_offered=False
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     counts: dict[str, int] = {}
     try:

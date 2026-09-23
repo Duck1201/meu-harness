@@ -29,6 +29,7 @@ from ..corpus_service import CorpusRetriever
 from ..corpus_tools import CorpusToolExecutor
 from ..domain import (
     CORPUS_EFFECT,
+    LOCAL_INFERENCE_EFFECT,
     MUTATION_EFFECT,
     WAIVABLE_CONFIRMATION_REASONS,
     Grant,
@@ -52,8 +53,10 @@ from ..ports import (
     TokenEstimator,
     ToolExecutor,
     ToolSchema,
+    VisionRuntime,
 )
 from ..system_prompt import build_system_prompt
+from ..vision_tools import VisionToolExecutor
 from ..web_tools import WebToolExecutor
 from .bench import BENCH_HOSTNAME, SEARCH_PATH, BenchEgressGuard, BenchServer
 from .language import PortugueseDetector
@@ -396,12 +399,14 @@ class ModelCaseRunner:
         embedder: EmbeddingRuntime | None = None,
         runtime_switch: RuntimeSwitch | None = None,
         answer_judge: CorpusAnswerJudge | None = None,
+        vision_runtime: VisionRuntime | None = None,
     ) -> None:
         self._config = config
         self._runtime = runtime
         self._estimator = estimator
         self._runtime_switch = runtime_switch
         self._answer_judge = answer_judge
+        self._vision_runtime = vision_runtime
         # Sem embedder, o acervo da fixture é montado pelo determinístico da
         # bancada, e o que chega ao modelo é a passagem que o hash sorteou. Com
         # ele, é a passagem que a produção entregaria — inclusive nenhuma.
@@ -417,6 +422,21 @@ class ModelCaseRunner:
 
     def supports(self, fixture_type: str) -> bool:
         return fixture_type in self._SUPPORTED_TYPES
+
+    def _vision_for(self, settings: Mapping[str, JsonValue]) -> VisionRuntime | None:
+        """A visão do braço: a do contrato, salvo quando o braço diz outra coisa.
+
+        Um braço que pede visão sem runtime configurado é erro: medir o braço sem
+        visão com o rótulo de com é o jeito de o relatório comparar nada com nada.
+        """
+        declared = settings.get("vision", self._config.vision.mode)
+        if declared == "disabled":
+            return None
+        if declared != "enabled":
+            raise ValueError(f"unknown vision in arm settings: {declared!r}")
+        if self._vision_runtime is None:
+            raise ValueError("arm asks for vision and no vision runtime is configured")
+        return self._vision_runtime
 
     def _judge_for(self, settings: Mapping[str, JsonValue]) -> CorpusAnswerJudge | None:
         """O braço liga o juiz; sem juiz configurado, pedir um é erro, não silêncio."""
@@ -505,7 +525,8 @@ class ModelCaseRunner:
                 )
                 if corpus is not None and granted:
                     policy = _with_corpus_grant(policy, corpus.corpus_id)
-                executor = self._executor(workspace, policy, bench, corpus)
+                vision = self._vision_for(spec.settings)
+                executor = self._executor(workspace, policy, bench, corpus, vision)
                 engine = AgentEngine(
                     store=store,
                     runtime=runtime,
@@ -523,8 +544,9 @@ class ModelCaseRunner:
                         config,
                         today=BENCH_DATE,
                         operator_notes=self._operator_notes,
+                        vision_tool_offered=vision is not None,
                     ),
-                    tool_schemas=self._tool_schemas(policy),
+                    tool_schemas=self._tool_schemas(policy, vision_offered=vision is not None),
                     model_options={
                         "temperature": _sampling(
                             spec.settings,
@@ -614,13 +636,17 @@ class ModelCaseRunner:
                 evaluation=evaluation,
             )
 
-    def _tool_schemas(self, policy: SessionPolicy) -> tuple[ToolSchema, ...]:
+    def _tool_schemas(
+        self, policy: SessionPolicy, *, vision_offered: bool
+    ) -> tuple[ToolSchema, ...]:
         effective = policy.effective_grants
         return tuple(
             definition.tool_schema()
             for definition in self._config.tool_registry.model_tools
             if definition.status == "enabled"
             and all(grant in effective for grant in definition.required_grants)
+            # Como em produção: sem o modelo de visão, a tool não é oferecida.
+            and (vision_offered or LOCAL_INFERENCE_EFFECT not in definition.effects)
         )
 
     def _executor(
@@ -629,6 +655,7 @@ class ModelCaseRunner:
         policy: SessionPolicy,
         bench: BenchServer,
         corpus: EvalCorpus | None = None,
+        vision: VisionRuntime | None = None,
     ) -> ToolExecutor:
         registry = self._config.tool_registry
         local: ToolExecutor = RegistryToolExecutor(
@@ -661,9 +688,22 @@ class ModelCaseRunner:
             if corpus is not None
             else None
         )
+        vision_executor: ToolExecutor | None = (
+            VisionToolExecutor(
+                registry=registry,
+                workspace_root=workspace,
+                session_policy=policy,
+                runtime=vision,
+                config=self._config.vision,
+            )
+            if vision is not None
+            else None
+        )
         return CompositeToolExecutor(
             routes={
-                definition.name: self._route(definition.effects, local, web, corpus_executor)
+                definition.name: self._route(
+                    definition.effects, local, web, corpus_executor, vision_executor
+                )
                 for definition in registry.model_tools
             }
         )
@@ -674,10 +714,13 @@ class ModelCaseRunner:
         local: ToolExecutor,
         web: ToolExecutor,
         corpus: ToolExecutor | None,
+        vision: ToolExecutor | None = None,
     ) -> ToolExecutor:
         """Rota pelo efeito, como em produção — nunca pelo nome da tool."""
         if CORPUS_EFFECT in effects and corpus is not None:
             return corpus
+        if LOCAL_INFERENCE_EFFECT in effects and vision is not None:
+            return vision
         if "data_egress" in effects:
             return web
         return local

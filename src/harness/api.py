@@ -58,6 +58,7 @@ from .ports import ConfirmationRequest
 from .setup import SetupController, SetupError, SetupSubmission, validated_host_config
 from .system_prompt import load_operator_notes
 from .token_estimator import HuggingFaceTokenEstimator
+from .vision_runtime import OllamaVisionRuntime
 
 DEFAULT_PORT = 8765
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
@@ -950,6 +951,7 @@ def _default_service(
         corpus_directory=state_dir / "corpora",
         embedder=embedder,
         answer_judge=_answer_judge(config, host_config),
+        vision_runtime=_vision_runtime(config, host_config),
     )
 
 
@@ -964,6 +966,22 @@ def _answer_judge(
         base_url=host_config.ollama_url if host_config is not None else DEFAULT_OLLAMA_URL,
         model=settings.ollama_tag,
         expected_digest=settings.ollama_digest,
+    )
+
+
+def _vision_runtime(
+    config: HarnessConfig, host_config: HostConfig | None
+) -> OllamaVisionRuntime | None:
+    """A visão só existe ligada no contrato; sem ela, describe_image nem é oferecida."""
+    settings = config.vision
+    if settings.mode != "enabled":
+        return None
+    return OllamaVisionRuntime(
+        base_url=host_config.ollama_url if host_config is not None else DEFAULT_OLLAMA_URL,
+        model=settings.ollama_tag,
+        expected_digest=settings.ollama_digest,
+        max_output_tokens=settings.max_output_tokens,
+        context_tokens=settings.context_tokens,
     )
 
 

@@ -20,7 +20,7 @@ _TODAY = date(2026, 8, 11)
 def test_prompt_states_the_capability_the_profile_does_not_declare() -> None:
     config = load_config()
 
-    prompt = build_system_prompt(config, today=_TODAY, operator_notes="")
+    prompt = build_system_prompt(config, today=_TODAY, operator_notes="", vision_tool_offered=False)
 
     assert "workspace root" in prompt
     assert "A tool result is authoritative" in prompt
@@ -48,7 +48,9 @@ def test_a_declared_capability_is_not_announced_as_missing() -> None:
     profiles = config.model_profiles.model_copy(update={"runtime_profiles": (seeing,)})
     sighted = config.model_copy(update={"model_profiles": profiles})
 
-    prompt = build_system_prompt(sighted, today=_TODAY, operator_notes="")
+    prompt = build_system_prompt(
+        sighted, today=_TODAY, operator_notes="", vision_tool_offered=False
+    )
 
     assert "You cannot see images" not in prompt
     assert "A tool result is authoritative" in prompt
@@ -57,20 +59,20 @@ def test_a_declared_capability_is_not_announced_as_missing() -> None:
 def test_prompt_carries_the_date_it_was_given_and_forbids_looking_it_up() -> None:
     config = load_config()
 
-    prompt = build_system_prompt(config, today=_TODAY, operator_notes="")
+    prompt = build_system_prompt(config, today=_TODAY, operator_notes="", vision_tool_offered=False)
 
     assert "Today's date is 2026-08-11 (UTC)." in prompt
     assert "do not call a tool to look it up" in prompt
     # Nothing in the prompt reads the clock: another date in, another date out.
     assert "2026-08-11" not in build_system_prompt(
-        config, today=date(2027, 1, 2), operator_notes=""
+        config, today=date(2027, 1, 2), operator_notes="", vision_tool_offered=False
     )
 
 
 def test_an_empty_operator_block_leaves_the_prompt_untouched() -> None:
     config = load_config()
 
-    prompt = build_system_prompt(config, today=_TODAY, operator_notes="")
+    prompt = build_system_prompt(config, today=_TODAY, operator_notes="", vision_tool_offered=False)
 
     # The exact string the harness produced before SYSTEM-PROMPT.md existed: an
     # absent Operator block must not cost even a trailing space.
@@ -96,7 +98,9 @@ def test_an_empty_operator_block_leaves_the_prompt_untouched() -> None:
 def test_the_operator_block_is_appended_at_the_end() -> None:
     config = load_config()
 
-    prompt = build_system_prompt(config, today=_TODAY, operator_notes="Prefira respostas curtas.")
+    prompt = build_system_prompt(
+        config, today=_TODAY, operator_notes="Prefira respostas curtas.", vision_tool_offered=False
+    )
 
     assert prompt.endswith(" Prefira respostas curtas.")
     assert "  " not in prompt

@@ -31,6 +31,7 @@ def test_config_loader_reads_harness_profiles_and_tool_registry() -> None:
         "corpus_search",
         "calculate",
         "get_weather",
+        "describe_image",
     ]
     assert config.tool_schemas[0].parameters["type"] == "object"
     assert (
@@ -45,8 +46,10 @@ def test_config_loader_reads_harness_profiles_and_tool_registry() -> None:
 # 2026-08-15). O piso é 2,5 porque a conta só protege se errar para o lado caro.
 _BYTES_PER_TOKEN_FLOOR = 2.5
 
-# Medido no mesmo lugar: system prompt (239) mais os schemas das 11 tools (1.663).
-_FIXED_FLOOR_TOKENS = 1902
+# Medido com o tokenizer do Gemma 4 E4B (perfil ativo desde 2026-09-23) e a visão
+# oferecida, que é o pior caso: system prompt (278) mais os schemas das 12 tools
+# (1.979). Sem a visão são 245 + 1.806.
+_FIXED_FLOOR_TOKENS = 2257
 
 
 def test_a_full_batch_of_reads_at_the_cap_still_fits_the_context_budget() -> None:

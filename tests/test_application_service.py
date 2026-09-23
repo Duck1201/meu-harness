@@ -28,6 +28,7 @@ from harness import (
     TurnStatus,
     load_config,
 )
+from harness.ports import VisionAnswer
 
 
 class RecordingEventSink:
@@ -129,7 +130,8 @@ def test_service_exposes_effective_tool_schemas_without_disclosing_the_search_en
                 "get_weather",
             }
             # corpus_search fica de fora: este serviço não tem modelo de embedding
-            # nem diretório de corpora, então não há executor por trás do nome.
+            # nem diretório de corpora, então não há executor por trás do nome. O
+            # mesmo vale para describe_image, que não tem modelo de visão aqui.
             offered = [{schema.name for schema in request.tools} for request in runtime.requests]
             assert offered == [catalogue, catalogue, catalogue]
 
@@ -157,6 +159,50 @@ def test_service_exposes_effective_tool_schemas_without_disclosing_the_search_en
             await service.shutdown()
 
     asyncio.run(scenario())
+
+
+class _Vision:
+    async def describe(self, image: bytes, question: str) -> VisionAnswer:
+        del image, question
+        return VisionAnswer(text="ok", latency_ms=1.0)
+
+
+def test_describe_image_is_offered_and_announced_only_with_a_vision_model(
+    tmp_path: Path,
+) -> None:
+    """Oferecer a tool e dizer ao modelo que ele não enxerga seriam fatos opostos."""
+
+    async def offered(vision: _Vision | None) -> tuple[set[str], str]:
+        workspace = tmp_path / ("com" if vision else "sem")
+        workspace.mkdir()
+        runtime = CapturingRuntime()
+        service = ApplicationService(
+            store=ConversationStore(workspace.with_suffix(".c.sqlite3")),
+            observability_store=ObservabilityStore(workspace.with_suffix(".o.sqlite3")),
+            config=load_config(),
+            runtime=runtime,
+            estimator=FakeEstimator(),
+            allowed_workspace_roots=(workspace,),
+            vision_runtime=vision,
+        )
+        await service.initialize()
+        try:
+            conversation = await service.create_conversation(str(workspace))
+            await service.enqueue_request(conversation.id, "o que tem neste print?")
+            await _wait_until_idle(service, conversation.id)
+        finally:
+            await service.shutdown()
+        request = runtime.requests[0]
+        return {schema.name for schema in request.tools}, request.messages[0].content
+
+    with_tools, with_prompt = asyncio.run(offered(_Vision()))
+    without_tools, without_prompt = asyncio.run(offered(None))
+
+    assert "describe_image" in with_tools
+    assert "describe_image" not in without_tools
+    assert "ask describe_image" in with_prompt
+    assert "You cannot see images. If a request" in without_prompt
+    assert "describe_image" not in without_prompt
 
 
 def test_web_search_is_always_offered_because_its_fallback_needs_no_credential(

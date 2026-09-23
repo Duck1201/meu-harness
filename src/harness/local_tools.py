@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from hashlib import sha256
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Any, cast
 
 from jsonschema import Draft202012Validator
@@ -19,24 +19,14 @@ from jsonschema import Draft202012Validator
 from .config import ReplayPolicy, ToolDefinitionConfig, ToolRegistryConfig
 from .domain import SessionPolicy, ToolCall, ToolResult, ToolResultStatus, grant_reason_code
 from .ports import ConfirmationPreview, ToolBatchPreflight
+from .workspace_paths import PathPolicyError as _PreflightIssue
+from .workspace_paths import WorkspacePathPolicy
+from .workspace_paths import relative_parts as _relative_parts
 
 _WORKSPACE_EFFECTS = frozenset({"workspace_read", "workspace_write"})
-_CREDENTIAL_DIRECTORIES = frozenset(
-    {".aws", ".azure", ".credentials", ".gnupg", ".kube", ".ssh", "credentials"}
-)
-_PRIVATE_KEY_NAMES = frozenset({"id_dsa", "id_ecdsa", "id_ed25519", "id_rsa", "identity"})
-_PRIVATE_KEY_SUFFIXES = frozenset({".jks", ".key", ".p12", ".pem", ".pfx", ".pkcs12"})
-_ENV_EXAMPLE_SUFFIXES = (".example", ".sample", ".template")
 # A confirmation dialog is read, not scrolled forever. Past this the diff is cut
 # and says so, so the Operator knows they are deciding on a summary.
 _PREVIEW_DIFF_MAX_LINES = 400
-
-
-class _PreflightIssue(Exception):
-    def __init__(self, code: str, detail: str) -> None:
-        super().__init__(detail)
-        self.code = code
-        self.detail = detail
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,9 +62,7 @@ class RegistryToolExecutor:
             raise ValueError("byte limits must be positive")
         self._max_read_bytes = max_read_bytes
         self._max_search_bytes = max_search_bytes
-        self._host_denied_paths = tuple(
-            _relative_parts(path, allow_dot=True) for path in host_denied_paths
-        )
+        self._paths = WorkspacePathPolicy(root, host_denied_paths)
         self._mutation_ledger: dict[tuple[str, str], _MutationLedgerEntry] = {}
 
     async def preflight(self, calls: Sequence[ToolCall]) -> ToolBatchPreflight:
@@ -1052,37 +1040,13 @@ class RegistryToolExecutor:
             self._validate_policy_path(pattern_parts, literal_only=True)
 
     def _validate_policy_path(self, parts: tuple[str, ...], *, literal_only: bool = False) -> None:
-        checked = tuple(
-            part for part in parts if not literal_only or not any(char in part for char in "*?[")
-        )
-        if _is_sensitive(checked):
-            raise _PreflightIssue(
-                "sensitive_path_denied", "Access to this sensitive path is denied."
-            )
-        if any(_is_prefix(denied, parts) for denied in self._host_denied_paths):
-            raise _PreflightIssue("host_path_denied", "The host policy denies this path.")
+        self._paths.check(parts, literal_only=literal_only)
 
     def _validate_read_path(self, parts: tuple[str, ...]) -> None:
         self._resolve_read_path(parts, strict=False)
 
     def _resolve_read_path(self, parts: tuple[str, ...], *, strict: bool) -> Path:
-        try:
-            resolved = self._workspace_root.joinpath(*parts).resolve(strict=strict)
-        except FileNotFoundError:
-            raise
-        except PermissionError:
-            raise
-        except (OSError, RuntimeError):
-            raise _PreflightIssue(
-                "path_validation_failed", "The path could not be validated."
-            ) from None
-        if not resolved.is_relative_to(self._workspace_root):
-            raise _PreflightIssue(
-                "path_outside_workspace", "The resolved path is outside the workspace."
-            )
-        resolved_parts = resolved.relative_to(self._workspace_root).parts
-        self._validate_policy_path(resolved_parts)
-        return resolved
+        return self._paths.resolve_read(parts, strict=strict)
 
     def _validate_mutation_path(self, parts: tuple[str, ...]) -> None:
         current = self._workspace_root
@@ -1100,49 +1064,11 @@ class RegistryToolExecutor:
                 ) from None
 
 
-def _relative_parts(value: str, *, allow_dot: bool, allow_glob: bool = False) -> tuple[str, ...]:
-    if "\x00" in value:
-        raise _PreflightIssue("nul_in_path", "Paths cannot contain NUL bytes.")
-    if Path(value).is_absolute() or PureWindowsPath(value).is_absolute():
-        raise _PreflightIssue("absolute_path_not_allowed", "Paths must be workspace-relative.")
-    if "\\" in value:
-        raise _PreflightIssue("invalid_path", "Paths must use forward slashes.")
-    raw_parts = value.split("/")
-    if any(part == ".." for part in raw_parts):
-        raise _PreflightIssue(
-            "path_traversal_not_allowed", "Parent traversal is not allowed in paths."
-        )
-    parts = tuple(part for part in raw_parts if part not in {"", "."})
-    if not parts and not allow_dot:
-        raise _PreflightIssue("invalid_path", "The path must identify a workspace entry.")
-    if not allow_glob and any(any(char in part for char in "*?[") for part in parts):
-        raise _PreflightIssue("invalid_path", "Wildcard characters are not allowed in this path.")
-    return parts
-
-
 def _string_argument(call: ToolCall, key: str, *, default: str | None = None) -> str:
     value = call.arguments.get(key, default)
     if not isinstance(value, str):
         raise _PreflightIssue("invalid_tool_arguments", f"{key} must be a string.")
     return value
-
-
-def _is_sensitive(parts: tuple[str, ...]) -> bool:
-    for part in parts:
-        lowered = part.lower()
-        if lowered == ".git" or lowered in _CREDENTIAL_DIRECTORIES:
-            return True
-        if lowered == ".env" or (
-            lowered.startswith(".env.") and not lowered.endswith(_ENV_EXAMPLE_SUFFIXES)
-        ):
-            return True
-        if lowered in _PRIVATE_KEY_NAMES or Path(lowered).suffix in _PRIVATE_KEY_SUFFIXES:
-            return True
-    return False
-
-
-def _is_prefix(prefix: tuple[str, ...], path: tuple[str, ...]) -> bool:
-    return len(prefix) <= len(path) and path[: len(prefix)] == prefix
 
 
 def _has_symlink_ancestor(base: Path, child_parts: tuple[str, ...]) -> bool:

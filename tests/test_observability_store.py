@@ -41,6 +41,10 @@ def test_observability_accepts_metadata_and_rejects_known_content_fields(tmp_pat
                 event_type="network.call",
                 payload={"batch": ({"query": "secret"},)},
             )
+        # describe_image: nem a imagem nem a pergunta sobre ela saem da conversa.
+        for field in ("image", "images", "question", "b64"):
+            with pytest.raises(ContentPayloadError, match=field):
+                await store.record(event_type="tool.call", payload={"vision": {field: "secret"}})
 
         assert await store.list_events() == [event]
 
