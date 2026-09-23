@@ -5,6 +5,16 @@
   "release_pending_document": "docs/RELEASE-PENDING.md",
   "runtime_profiles": "config/model-profiles.json",
   "tool_registry": "config/tool-registry.json",
+  "vision": {
+    "mode": "disabled",
+    "ollama_tag": "qwen3.5:2b-q4_K_M",
+    "ollama_digest": "124a03c347777e8e4e5955c33610ae01d9d90d8c2a718bfba069c498d5c7f3c9",
+    "max_image_bytes": 10485760,
+    "accepted_formats": ["png", "jpeg", "webp"],
+    "max_output_tokens": 700,
+    "context_tokens": 8192,
+    "adr": "docs/adr/0016-local-vision-tool.md"
+  },
   "platform": {
     "python": "3.13",
     "operating_system": "linux",
@@ -51,7 +61,8 @@
       "workspace_write": ["WorkspaceRootGrant", "WriteGrant"],
       "data_egress": ["WebAccessGrant"],
       "corpus_read": ["CorpusGrant"],
-      "pure_compute": []
+      "pure_compute": [],
+      "local_inference": []
     },
     "grant_authority": "Operator",
     "model_cannot_grant_or_expand_access": true,

@@ -18,6 +18,13 @@ MUTATION_EFFECT = "workspace_write"
 CORPUS_EFFECT = "corpus_read"
 CORPUS_GRANT = "CorpusGrant"
 
+# Inference by a local model other than the chat model, over input the harness
+# already authorized under another effect. It needs no grant of its own — nothing
+# leaves the machine — and exists so a tool that runs a second model on the GPU is
+# offered only when that model is configured, and spends the full call budget
+# instead of the cheap read one (ADR 0016).
+LOCAL_INFERENCE_EFFECT = "local_inference"
+
 # The mark every derivation of web content keeps. Written here because the Corpus
 # applies it at ingestion, long before any Turn sees the Chunk.
 UNTRUSTED_WEB_TAINT = "UntrustedWebTaint"

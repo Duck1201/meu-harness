@@ -107,6 +107,26 @@ class ModelRuntime(Protocol):
     async def generate(self, request: ModelRequest) -> ModelResponse: ...
 
 
+@dataclass(frozen=True, slots=True)
+class VisionAnswer:
+    """What the vision model said about one image, plus what it cost."""
+
+    text: str
+    latency_ms: float
+    output_tokens: int | None = None
+
+
+class VisionRuntime(Protocol):
+    """A local model that answers a question about one image (ADR 0016).
+
+    Separate from ModelRuntime because it is a separate model with its own digest,
+    and because the chat model never receives image bytes: the tool reads the
+    file, this runtime looks at it, and only text goes back into the ModelView.
+    """
+
+    async def describe(self, image: bytes, question: str) -> VisionAnswer: ...
+
+
 class EmbeddingRuntime(Protocol):
     """Turns text into the vectors a Corpus is searched by.
 

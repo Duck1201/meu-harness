@@ -477,6 +477,32 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
     "ExecutionRoute com thinking exige reasoning suportado e aprovado",
   );
 
+  // Visão é um segundo modelo local (ADR 0016): o contrato fixa qual, pelo digest,
+  // e os limites que o executor aplica antes de ler um byte da imagem.
+  const vision = harness.vision ?? {};
+  check(["disabled", "enabled"].includes(vision.mode), "vision.mode deve ser disabled ou enabled");
+  check(
+    typeof vision.ollama_tag === "string" && vision.ollama_tag.length > 0,
+    "vision.ollama_tag ausente",
+  );
+  check(shaPattern.test(vision.ollama_digest ?? ""), "vision.ollama_digest deve ser SHA-256");
+  check(
+    Array.isArray(vision.accepted_formats) &&
+      vision.accepted_formats.length > 0 &&
+      vision.accepted_formats.every((format) => ["png", "jpeg", "webp"].includes(format)),
+    "vision.accepted_formats só aceita png, jpeg e webp",
+  );
+  for (const field of ["max_image_bytes", "max_output_tokens", "context_tokens"]) {
+    check(
+      Number.isInteger(vision[field]) && vision[field] > 0,
+      `vision.${field} deve ser inteiro positivo`,
+    );
+  }
+  check(
+    harness.policy?.effect_grants?.local_inference?.length === 0,
+    "local_inference não exige grant: nada sai da máquina",
+  );
+
   check(
     harness.platform?.python === "3.13" &&
       harness.platform?.operating_system === "linux" &&

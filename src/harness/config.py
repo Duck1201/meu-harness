@@ -118,6 +118,18 @@ class CorpusAnswerJudgeConfig(ConfigModel):
     ollama_digest: str = ""
 
 
+class VisionConfig(ConfigModel):
+    # `enabled` oferece `describe_image`; nasce `disabled` até o experimento
+    # `vision_tool_enablement` medir (ADR 0016).
+    mode: Literal["disabled", "enabled"] = "disabled"
+    ollama_tag: str = ""
+    ollama_digest: str = ""
+    max_image_bytes: int = 10 * 1024 * 1024
+    accepted_formats: tuple[str, ...] = ("png", "jpeg", "webp")
+    max_output_tokens: int = 700
+    context_tokens: int = 8192
+
+
 class CorpusConfig(ConfigModel):
     embedding: CorpusEmbeddingConfig
     ingestion: CorpusIngestionConfig
@@ -271,6 +283,7 @@ class _HarnessFile(ConfigModel):
     loop: LoopConfig
     context: ContextConfig
     corpus: CorpusConfig
+    vision: VisionConfig = VisionConfig()
 
 
 class HarnessConfig(ConfigModel):
@@ -282,6 +295,7 @@ class HarnessConfig(ConfigModel):
     loop: LoopConfig
     context: ContextConfig
     corpus: CorpusConfig
+    vision: VisionConfig = VisionConfig()
     model_profiles: ModelProfilesConfig
     tool_registry: ToolRegistryConfig
 
@@ -348,6 +362,7 @@ def load_config(path: str | Path = Path("config/harness.json")) -> HarnessConfig
         loop=harness.loop,
         context=harness.context,
         corpus=harness.corpus,
+        vision=harness.vision,
         model_profiles=profiles,
         tool_registry=registry,
     )
