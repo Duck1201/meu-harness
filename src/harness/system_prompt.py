@@ -12,6 +12,7 @@ RuntimeProfile, and drift between what the contract declares and what the model
 is told becomes impossible rather than merely unlikely.
 """
 
+import re
 from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
@@ -78,43 +79,32 @@ _VISION_TOOL_LINE = (
 )
 
 
-OPERATOR_MARKER = "<!-- OPERATOR -->"
-
 # ponytail: teto em caracteres, não em tokens — o estimator exige o tokenizer
 # carregado, que o composition root ainda não tem quando isto roda. São ~1k tokens
 # num orçamento de 65536 (config/harness.json#context.initial_budget_tokens).
 # Trocar por contagem real de tokens se o teto errar na prática.
 _OPERATOR_NOTES_LIMIT = 4000
 
-# A data no espelho versionado seria falsa amanhã, então ele guarda um marcador no
-# lugar dela. Substituir por uma data fixa e trocar de volta mantém uma única
-# função montando o prompt, que é o ponto do ADR 0007.
-_MIRROR_DATE = date(2026, 1, 1)
-_MIRROR_DATE_PLACEHOLDER = "{{TODAY}}"
+# Comentário HTML é nota para quem abre o arquivo, não texto para o modelo.
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def load_operator_notes(path: Path = Path("SYSTEM-PROMPT.md")) -> str:
     """O texto que o Operator anexou ao prompt, ou ``""`` quando não há arquivo.
 
-    Ler o arquivo é trabalho do composition root, não de ``build_system_prompt``:
-    o texto chega lá por argumento pelo mesmo motivo que a data chega, para que
+    O arquivo inteiro é o texto do Operator, menos os comentários HTML. Ler o
+    arquivo é trabalho do composition root, não de ``build_system_prompt``: o
+    texto chega lá por argumento pelo mesmo motivo que a data chega, para que
     corpus e produção não passem a montar prompts diferentes em silêncio.
     """
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return ""
-    _, separator, notes = text.partition(OPERATOR_MARKER)
-    if not separator:
-        raise ValueError(
-            f"{path} perdeu a marca {OPERATOR_MARKER} e não dá para saber onde "
-            "começa o texto do Operator. Restaure com "
-            "`uv run python scripts/seal-system-prompt.py` ou apague o arquivo."
-        )
-    stripped = notes.strip()
+    stripped = _HTML_COMMENT.sub("", text).strip()
     if len(stripped) > _OPERATOR_NOTES_LIMIT:
         raise ValueError(
-            f"O bloco do Operator em {path} tem {len(stripped)} caracteres e o "
+            f"O texto do Operator em {path} tem {len(stripped)} caracteres e o "
             f"limite é {_OPERATOR_NOTES_LIMIT}: ele entra em todo Turn e comeria "
             "o orçamento de contexto antes do histórico."
         )
@@ -150,24 +140,7 @@ def build_system_prompt(
     )
 
 
-def derived_prompt_mirror(config: HarnessConfig) -> str:
-    """O prompt derivado com a data trocada por um marcador, para SYSTEM-PROMPT.md.
-
-    O espelho é documentação: quem monta o prompt de verdade continua sendo
-    ``build_system_prompt``, e é ela que este texto reproduz.
-    """
-    prompt = build_system_prompt(
-        config,
-        today=_MIRROR_DATE,
-        operator_notes="",
-        vision_tool_offered=config.vision.mode == "enabled",
-    )
-    return prompt.replace(_MIRROR_DATE.isoformat(), _MIRROR_DATE_PLACEHOLDER)
-
-
 __all__ = [
-    "OPERATOR_MARKER",
     "build_system_prompt",
-    "derived_prompt_mirror",
     "load_operator_notes",
 ]

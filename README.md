@@ -114,7 +114,7 @@ uv run harness                    # ou: uv run harness --port 8765 --host 127.0.
 
 **Suba o servidor a partir da raiz do repositório.** `web/dist` e
 `SYSTEM-PROMPT.md` são resolvidos relativos ao diretório de trabalho: de outro
-lugar o painel responde 404 e o bloco do Operator some do prompt em silêncio,
+lugar o painel responde 404 e o texto do Operator some do prompt em silêncio,
 sem erro nenhum.
 
 Na primeira execução o servidor imprime um **token de setup efêmero** no stderr
@@ -320,21 +320,20 @@ uv run harness
 
 ## System prompt
 
-`SYSTEM-PROMPT.md`, na raiz, mostra o prompt que o modelo recebe, com a data
-ainda como marcador `{{TODAY}}` e o bloco do Operator como você o deixou. O
-arquivo tem duas metades separadas pela marca `<!-- OPERATOR -->`:
+O prompt é derivado dos contratos (`src/harness/system_prompt.py` e as
+capacidades em `config/model-profiles.json`), com a data do host a cada Turn.
+Para ver o prompt exato que o modelo recebe hoje:
 
-- **acima**, um espelho do prompt derivado dos contratos. É documentação: editar
-  ali não muda nada. Para mudar esse texto, mude `src/harness/system_prompt.py`
-  ou as capacidades em `config/model-profiles.json` e resele com
-  `uv run python scripts/seal-system-prompt.py` — o `{{TODAY}}` do espelho é
-  substituído pela data do host a cada Turn;
-- **abaixo**, o seu texto, anexado ao fim do prompt. Bloco vazio ou arquivo
-  ausente deixam o prompt exatamente como o de cima, byte a byte. O limite é
-  4000 caracteres, porque ele entra em todo Turn e disputa o orçamento de
-  contexto com o histórico.
+```bash
+uv run python scripts/show-system-prompt.py
+```
 
-Cada execução de eval congela o digest desse bloco junto dos digests de
+`SYSTEM-PROMPT.md`, na raiz, é o seu texto: tudo o que estiver ali, fora de
+comentários HTML (`<!-- ... -->`), é anexado ao fim do prompt. Arquivo vazio ou
+ausente deixa o prompt como o derivado, byte a byte. O limite é 4000 caracteres,
+porque ele entra em todo Turn e disputa o orçamento de contexto com o histórico.
+
+Cada execução de eval congela o digest desse texto junto dos digests de
 contrato: dois braços com textos de Operator diferentes não são o mesmo sistema
 e não devem ser comparados como se fossem.
 

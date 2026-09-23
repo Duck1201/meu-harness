@@ -5,14 +5,7 @@ import pytest
 
 from harness import load_config
 from harness.config import CapabilityConfig
-from harness.system_prompt import (
-    OPERATOR_MARKER,
-    build_system_prompt,
-    derived_prompt_mirror,
-    load_operator_notes,
-)
-
-_SEAL_COMMAND = "uv run python scripts/seal-system-prompt.py"
+from harness.system_prompt import build_system_prompt, load_operator_notes
 
 _TODAY = date(2026, 8, 11)
 
@@ -110,51 +103,27 @@ def test_a_missing_file_yields_no_operator_notes(tmp_path: Path) -> None:
     assert load_operator_notes(tmp_path / "nao-existe.md") == ""
 
 
-def test_an_empty_operator_block_reads_as_no_notes(tmp_path: Path) -> None:
+def test_html_comments_are_notes_for_the_reader_not_for_the_model(tmp_path: Path) -> None:
     path = tmp_path / "SYSTEM-PROMPT.md"
-    path.write_text(f"# espelho\n\n{OPERATOR_MARKER}\n\n\n", encoding="utf-8")
+    path.write_text("<!--\nexplicação do arquivo\n-->\n\n<!-- outra -->\n", encoding="utf-8")
 
     assert load_operator_notes(path) == ""
 
 
-def test_a_file_without_the_marker_is_refused(tmp_path: Path) -> None:
+def test_the_whole_file_is_the_operator_text(tmp_path: Path) -> None:
     path = tmp_path / "SYSTEM-PROMPT.md"
-    path.write_text("# espelho\n\nsem marca nenhuma\n", encoding="utf-8")
+    path.write_text("<!-- nota -->\nResponda em pt-BR.\n\nSeja breve.\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match=OPERATOR_MARKER):
-        load_operator_notes(path)
+    assert load_operator_notes(path) == "Responda em pt-BR.\n\nSeja breve."
 
 
 def test_an_oversized_operator_block_is_refused_before_the_turn(tmp_path: Path) -> None:
     path = tmp_path / "SYSTEM-PROMPT.md"
-    path.write_text(f"{OPERATOR_MARKER}\n{'a' * 5000}\n", encoding="utf-8")
+    path.write_text(f"{'a' * 5000}\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="limite é 4000"):
         load_operator_notes(path)
 
 
-def test_the_mirror_carries_a_placeholder_instead_of_a_date() -> None:
-    mirror = derived_prompt_mirror(load_config())
-
-    assert "{{TODAY}}" in mirror
-    assert "2026-01-01" not in mirror
-
-
-def test_the_mirror_in_the_repo_is_current() -> None:
-    path = Path("SYSTEM-PROMPT.md")
-    assert path.is_file(), f"SYSTEM-PROMPT.md não existe. Gere com `{_SEAL_COMMAND}`."
-    mirror, _, _ = path.read_text(encoding="utf-8").partition(OPERATOR_MARKER)
-
-    assert derived_prompt_mirror(load_config()) in mirror, (
-        f"O espelho em {path} está defasado. Rode `{_SEAL_COMMAND}`."
-    )
-
-
-def test_the_marker_appears_once_so_the_split_lands_where_it_should() -> None:
-    # Citar a marca na prosa do cabeçalho faria load_operator_notes cortar cedo e
-    # tratar o resto do cabeçalho como texto do Operator.
-    assert Path("SYSTEM-PROMPT.md").read_text(encoding="utf-8").count(OPERATOR_MARKER) == 1
-
-
-def test_the_sealed_file_carries_no_operator_notes_by_default() -> None:
+def test_the_file_in_the_repo_carries_no_operator_text() -> None:
     assert load_operator_notes(Path("SYSTEM-PROMPT.md")) == ""

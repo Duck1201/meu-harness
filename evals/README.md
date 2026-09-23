@@ -64,7 +64,7 @@ runner deve registrar:
 
 1. RuntimeProfile e digest completos;
 2. ExecutionRoute, fixture, dataset_version, digests de contratos e o
-   digest do bloco do Operator em `SYSTEM-PROMPT.md`;
+   digest do texto do Operator em `SYSTEM-PROMPT.md`;
 3. sequência de AgentSteps, decisões e model_tools;
 4. validação de argumentos e efeitos realmente aplicados;
 5. TerminalOutcome e TaskVerdict, sem conflar os dois;

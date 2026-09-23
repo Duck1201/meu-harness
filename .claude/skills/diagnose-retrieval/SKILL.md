@@ -109,8 +109,6 @@ gargalo virou o processo, não o código.
 - Editou `config/*.json` → `node scripts/validate-contracts.mjs --write` e commite
   o digest. Sem isso a falha aparece longe, como `DatasetDriftError` em testes que
   não têm relação com a mudança.
-- Editou `config/tool-registry.json` → rode também
-  `uv run python scripts/seal-system-prompt.py`.
 - `pkill -f "venv/bin/harness"` **mata o próprio shell** — o padrão casa com a
   linha de comando do bash. Use `pgrep -f ... | head -1` e `kill`.
 - Suba o servidor com `setsid nohup ... < /dev/null &`, senão ele morre junto com

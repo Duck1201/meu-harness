@@ -11,6 +11,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
   12,1 s por caso e nenhuma resposta malformada. É o primeiro perfil a passar a
   edição byte a byte e responde sem fingir que vê (9/9). O `mitos` segue como
   Challenger. O tokenizer do estimador passa a ser o do Gemma.
+- **`SYSTEM-PROMPT.md` é só o texto do Operator.** Saíram o espelho selado do
+  prompt derivado, a marca `<!-- OPERATOR -->`, o `seal-system-prompt.py` e o
+  teste que falhava quando o espelho envelhecia. Comentários HTML no arquivo são
+  ignorados. `scripts/show-system-prompt.py` imprime o prompt exato de hoje.
 
 ### Adicionado
 
