@@ -2,6 +2,10 @@
 # Prepara um host novo para rodar o harness: deps Python/web, perfil Ollama e
 # tokenizer.json. Idempotente — pode rodar de novo sem duplicar trabalho.
 # Depois dele, só falta abrir http://127.0.0.1:8765/setup com `uv run harness`.
+#
+# O perfil vem do contrato: tag, Modelfile, modelo base, digest e tokenizer são os
+# do `active_runtime_profile` de config/model-profiles.json. Trocar o perfil
+# funcional não pede mudança aqui.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -16,26 +20,27 @@ else
   echo "==> corepack não encontrado, pulando build do frontend" >&2
 fi
 
-if command -v ollama >/dev/null; then
-  echo "==> perfil Ollama (mitos)"
-  if ! ollama show mitos >/dev/null 2>&1; then
-    ollama create mitos -f Modelfile
-  fi
-  expected_digest=$(python3 -c '
+read -r profile_id tag modelfile base expected_digest tokenizer_url < <(python3 -c '
 import json
 profiles = json.load(open("config/model-profiles.json"))
-active = profiles["active_runtime_profile"]
-for profile in profiles["runtime_profiles"]:
-    if profile["id"] == active:
-        print(profile["installation"]["installed_profile_digest_sha256"])
-        break
+active = next(p for p in profiles["runtime_profiles"] if p["id"] == profiles["active_runtime_profile"])
+i = active["installation"]
+print(active["id"], i["installed_tag"], i["repository_modelfile"], active["model"]["base_model"],
+      i["installed_profile_digest_sha256"], i["tokenizer_url"])
 ')
+
+if command -v ollama >/dev/null; then
+  echo "==> perfil Ollama $profile_id ($tag)"
+  if ! ollama show "$tag" >/dev/null 2>&1; then
+    ollama pull "$base"
+    ollama create "${tag%:latest}" -f "$modelfile"
+  fi
   # O digest do manifesto, a mesma coisa que OllamaRuntime.verify_profile compara
   # com /api/tags. Hash do texto do Modelfile é outro valor e não serve aqui.
-  installed_digest=$(curl -s http://127.0.0.1:11434/api/tags | python3 -c '
-import json, sys
+  installed_digest=$(curl -s http://127.0.0.1:11434/api/tags | TAG="$tag" python3 -c '
+import json, os, sys
 for model in json.load(sys.stdin)["models"]:
-    if model["name"] == "mitos:latest":
+    if model["name"] == os.environ["TAG"]:
         print(model["digest"])
         break
 ')
@@ -49,15 +54,14 @@ else
 fi
 
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/harness-2"
-tokenizer_path="$state_dir/tokenizer.json"
+tokenizer_path="$state_dir/tokenizer-$profile_id.json"
 if [ ! -f "$tokenizer_path" ]; then
-  echo "==> baixando tokenizer.json para $tokenizer_path"
+  echo "==> baixando tokenizer.json de $profile_id para $tokenizer_path"
   mkdir -p "$state_dir"
-  curl -fsSL \
-    "https://huggingface.co/huihui-ai/Huihui-Qwen3.5-4B-abliterated/resolve/main/tokenizer.json" \
-    -o "$tokenizer_path"
+  curl -fsSL "$tokenizer_url" -o "$tokenizer_path"
 else
-  echo "==> tokenizer.json já existe em $tokenizer_path"
+  echo "==> tokenizer já existe em $tokenizer_path"
 fi
+echo "==> no setup, aponte o tokenizer para $tokenizer_path"
 
 echo "==> pronto. Suba o servidor com: uv run harness"

@@ -12,7 +12,12 @@ from pathlib import Path
 import pytest
 
 from harness import TerminalOutcomeKind, load_config
-from harness.config import HarnessConfig, RuntimeProfileConfig
+from harness.config import (
+    QWEN_REASONING_MARKUP,
+    QWEN_TOOL_MARKUP,
+    HarnessConfig,
+    RuntimeProfileConfig,
+)
 from harness.domain import JsonValue
 from harness.evals import (
     EvalCaseSpec,
@@ -44,8 +49,14 @@ def _fixture() -> RegressionFixture:
 
 
 def _config_with_challenger() -> HarnessConfig:
+    """Controle com a marcação do Qwen e Challenger com a do Gemma, seja qual for o ativo."""
     config = load_config()
-    control = config.runtime_profile
+    control = config.runtime_profile.model_copy(
+        update={
+            "tool_markup_leak_markers": QWEN_TOOL_MARKUP,
+            "reasoning_leak_markers": QWEN_REASONING_MARKUP,
+        }
+    )
     challenger = control.model_copy(
         update={
             "id": _CHALLENGER,
@@ -54,8 +65,11 @@ def _config_with_challenger() -> HarnessConfig:
             "tool_markup_leak_markers": ("<|tool_call>", "<tool_call|>"),
         }
     )
+    others = tuple(
+        profile for profile in config.model_profiles.runtime_profiles if profile.id != control.id
+    )
     profiles = config.model_profiles.model_copy(
-        update={"runtime_profiles": (*config.model_profiles.runtime_profiles, challenger)}
+        update={"runtime_profiles": (control, *others, challenger)}
     )
     return config.model_copy(update={"model_profiles": profiles})
 

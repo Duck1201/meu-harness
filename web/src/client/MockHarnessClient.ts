@@ -97,7 +97,7 @@ const experiments: Experiment[] = [
   {
     id: "page_verification",
     status: "active",
-    runtime_profile: "local_mitos_ollama_reproduction",
+    runtime_profile: "gemma4_e4b_qat_ollama",
     execution_route: "local_web_tools",
     fixture_tags: ["page"],
     arms: [{ id: "control" }, { id: "candidate" }],
@@ -382,7 +382,7 @@ export class MockHarnessClient implements HarnessClient {
       corpora: this.corpora,
       execution: {
         defaultExecutionRoute: "local_web_tools",
-        runtimeProfile: "local_mitos_ollama_reproduction",
+        runtimeProfile: "gemma4_e4b_qat_ollama",
         loop: {
           max_steps: 15,
           max_tool_calls_per_step: 4,
@@ -802,7 +802,7 @@ export class MockHarnessClient implements HarnessClient {
       mutable: true,
       host_config: this.hostConfig,
       default_execution_route: "local_web_tools",
-      runtime_profile: "local_mitos_ollama_reproduction",
+      runtime_profile: "gemma4_e4b_qat_ollama",
       yolo_enabled: this.yolo,
       loop: {
         max_steps: 15,

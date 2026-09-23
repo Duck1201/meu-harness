@@ -10,13 +10,13 @@
     "operating_system": "linux",
     "architecture": "x86_64"
   },
-  "default_runtime_profile": "local_mitos_ollama_reproduction",
+  "default_runtime_profile": "gemma4_e4b_qat_ollama",
   "default_execution_route": "local_web_tools",
   "execution_routes": [
     {
       "id": "local_web_tools",
       "status": "active",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "surface": "web",
       "model_tools_collection": "model_tools",
       "sampling": {

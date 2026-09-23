@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "768ac99c674fdc62fcdc87f2d6dd7aff588a7c3e5a811370835ec57d97162e1e",
+  "manifest_digest_sha256": "5a5e8f3565b0349980413e82c539fb0fe2cbf82d6a48804174374d388d3ce155",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -21,8 +21,8 @@
     "dataset_digest_sha256": "1008eced2d2d89119c9a993d36d50d9c64964cfe03efc6c6b83ce53af36c446b"
   },
   "contract_digests": {
-    "model_profiles_sha256": "5db5e099a16adaae70f9cadf2b6696914d30e062604bc7fedb534072ede00b7f",
-    "harness_sha256": "6a443252c3047ad594747d9cd6f525c672594bb896bd5a43759a9caae689030d",
+    "model_profiles_sha256": "b45364619167200a80b4bf3de47f833e3ea909247928d7815349d7948c8de927",
+    "harness_sha256": "a256f7cd3f11dea8d1a47db0f178bbffaadc909b6a18e010d3490e64d5d029ad",
     "tool_registry_sha256": "e1dbee48ce312924de041d3de7da7d3dd4b9f3e38be961df16618c5bbb53ff7c"
   },
   "primary_surface": "web",
@@ -2127,7 +2127,7 @@
     {
       "id": "temperature_local",
       "status": "required_before_default_change",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "tool_selection",
@@ -2160,7 +2160,7 @@
     {
       "id": "thinking_ollama",
       "status": "required_before_route_change",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "tool_selection",
@@ -2187,7 +2187,7 @@
     {
       "id": "prompt_language_factorial",
       "status": "required_to_isolate_inherited_confound",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "language_pt",
@@ -2226,7 +2226,7 @@
     {
       "id": "loop_limit_8_vs_15",
       "status": "required_before_reducing_limit",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "loop_guard",
@@ -2257,7 +2257,7 @@
     {
       "id": "page_verification_once_per_page_revision",
       "status": "blocked_automation_not_on_write_path",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [],
       "arms": [
@@ -2288,7 +2288,7 @@
     {
       "id": "model_view_serialization",
       "status": "promotion_executed_json_kept_adr_0010_reverted",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "tool_selection",
@@ -2325,7 +2325,7 @@
     {
       "id": "guarded_web_brave_escalation",
       "status": "promoted_before_release",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "web_fetch",
@@ -2355,7 +2355,7 @@
     {
       "id": "corpus_retrieval_vs_baseline",
       "status": "promoted_before_release",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "corpus_answer"
@@ -2389,7 +2389,7 @@
     {
       "id": "runtime_profile_bakeoff",
       "status": "required_before_default_change",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "tool_selection",
@@ -2449,7 +2449,7 @@
     {
       "id": "runtime_profile_bakeoff_finalists",
       "status": "required_before_default_change",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "tool_selection",
@@ -2489,7 +2489,7 @@
     {
       "id": "runtime_profile_final_round",
       "status": "required_before_default_change",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "tool_selection",
@@ -2544,7 +2544,7 @@
     {
       "id": "runtime_profile_gemma4_vs_mitos",
       "status": "required_before_default_change",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "tool_selection",
@@ -2579,7 +2579,7 @@
     {
       "id": "corpus_answer_judge_advisory",
       "status": "required_before_default_enablement",
-      "runtime_profile": "local_mitos_ollama_reproduction",
+      "runtime_profile": "gemma4_e4b_qat_ollama",
       "execution_route": "local_web_tools",
       "fixture_tags": [
         "corpus_answer",

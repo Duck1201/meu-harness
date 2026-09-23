@@ -2,6 +2,39 @@
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [Não lançado]
+
+### Alterado
+
+- **Perfil funcional: Gemma 4 E4B QAT.** Venceu o `mitos` (Qwen3.5-4B abliterated)
+  pelo protocolo de promoção: 41/50 contra 33/50, zero violações, 7,4 s contra
+  12,1 s por caso e nenhuma resposta malformada. É o primeiro perfil a passar a
+  edição byte a byte e responde sem fingir que vê (9/9). O `mitos` segue como
+  Challenger. O tokenizer do estimador passa a ser o do Gemma.
+
+### Adicionado
+
+- **Bancada de modelos.** Braços de experimento que nomeiam um RuntimeProfile
+  (Challenger) rodam nele; o `ProfileRuntimeSwitch` troca o modelo na placa entre
+  braços. Treze candidatos medidos e registrados em `evals/experiments.json`.
+- **llama.cpp como segundo runtime** para Challengers que o Ollama não serve,
+  verificado pelo SHA-256 do GGUF carregado ([ADR-0013](docs/adr/0013-second-local-runtime-llama-cpp.md)).
+- **Scrapling na coleta de Corpus**: limpeza de conteúdo oculto e rota de browser
+  por sintoma com o EgressGuard em toda requisição, ambos desligados até medição
+  ([ADR-0014](docs/adr/0014-corpus-browser-route-scrapling.md)).
+- **Juiz consultivo do Corpus**: Qwen3-Reranker-0.6B via Ollama anota se cada
+  passagem traz o fato pedido, desligado até o experimento
+  ([ADR-0015](docs/adr/0015-corpus-answer-judge.md)).
+
+### Corrigido
+
+- O oráculo de eval lê a resposta como o Operator a vê: escape de Markdown
+  (`ERR\_ORIGIN\_2049`) reprovava resposta certa e aprovava invenção.
+- Automações internas chegam no papel que o template do perfil lê
+  (`internal_automation_role`); o do Gemma descartava a recuperação do Corpus.
+- O motor deixou de fixar `think=True` e as marcas de vazamento do Qwen; o runner
+  de eval passou a respeitar `thinking` e `max_steps` dos braços.
+
 ## [1.0.0] — 2026-08-15
 
 Primeira release. O que ela exclui deliberadamente está em

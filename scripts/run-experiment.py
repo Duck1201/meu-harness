@@ -66,7 +66,7 @@ async def run(
     experiment_id: str,
     phase: EvalPhase,
     tier: EvalTier,
-    tokenizer: Path,
+    tokenizer: Path | None,
     tokenizer_dir: Path,
     profile: str | None,
     database: Path,
@@ -102,7 +102,9 @@ async def run(
     switch = ProfileRuntimeSwitch(
         launchers=launchers,
         tokenizer_dir=tokenizer_dir,
-        tokenizer_overrides={route_config.runtime_profile.id: tokenizer},
+        tokenizer_overrides=(
+            {route_config.runtime_profile.id: tokenizer} if tokenizer is not None else {}
+        ),
     )
     try:
         runtime, estimator = await switch.activate(config.runtime_profile)
@@ -216,8 +218,8 @@ def main() -> int:
     parser.add_argument(
         "--tokenizer",
         type=Path,
-        default=ROOT / ".harness/tokenizer.json",
-        help="tokenizer.json of the route's RuntimeProfile, used for the context budget",
+        default=None,
+        help="override the route profile's tokenizer.json (default: --tokenizer-dir/<id>.json)",
     )
     parser.add_argument(
         "--tokenizer-dir",
@@ -237,7 +239,7 @@ def main() -> int:
         help="EvalStore database; a temporary file by default",
     )
     arguments = parser.parse_args()
-    if not arguments.tokenizer.is_file():
+    if arguments.tokenizer is not None and not arguments.tokenizer.is_file():
         print(f"tokenizer not found: {arguments.tokenizer}", file=sys.stderr)
         return 2
     if arguments.database is not None:

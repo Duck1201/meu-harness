@@ -38,14 +38,15 @@ Idempotente — pode rodar de novo sem duplicar trabalho. Faz, nesta ordem:
 
 1. `uv sync` — instala as dependências Python e cria `.venv`.
 2. `corepack enable` + `pnpm install && pnpm build` em `web/` — gera `web/dist`.
-3. `ollama create mitos -f Modelfile` (só se o perfil `mitos` ainda não existir) e
-   confere o digest do perfil instalado contra
-   `installation.installed_profile_digest_sha256` em `config/model-profiles.json`,
-   avisando no stderr se divergir.
-4. Baixa o `tokenizer.json` do repositório do modelo base
-   (`huihui-ai/Huihui-Qwen3.5-4B-abliterated`) para
-   `$XDG_STATE_HOME/harness-2/tokenizer.json` (ou `~/.local/state/harness-2/` sem
-   `XDG_STATE_HOME`), só se o arquivo ainda não existir ali.
+3. Lê o perfil ativo (`active_runtime_profile` em `config/model-profiles.json`),
+   hoje `gemma4_e4b_qat_ollama`: baixa o modelo base (`gemma4:e4b-it-qat`), cria a
+   tag `harness-gemma4-e4b-qat` a partir de
+   [`modelfiles/gemma4_e4b_qat_ollama.Modelfile`](modelfiles/gemma4_e4b_qat_ollama.Modelfile)
+   (só se ela ainda não existir) e confere o digest instalado contra
+   `installation.installed_profile_digest_sha256`, avisando no stderr se divergir.
+4. Baixa o `tokenizer.json` do perfil (`installation.tokenizer_url`) para
+   `$XDG_STATE_HOME/harness-2/tokenizer-<perfil>.json` (ou `~/.local/state/harness-2/`
+   sem `XDG_STATE_HOME`), só se o arquivo ainda não existir ali.
 
 Qualquer etapa que precise de uma ferramenta ausente no PATH (`corepack`, `ollama`)
 é pulada com aviso — o script não falha por isso.
@@ -63,11 +64,14 @@ corepack enable && cd web && pnpm install && pnpm build && cd ..
 Gera `web/dist`, servido pelo próprio backend.
 
 ```bash
-ollama create mitos -f Modelfile
+ollama pull gemma4:e4b-it-qat
+ollama create harness-gemma4-e4b-qat -f modelfiles/gemma4_e4b_qat_ollama.Modelfile
 curl -s http://127.0.0.1:11434/api/tags \
-  | python3 -c "import json,sys;print(next((m['digest'] for m in json.load(sys.stdin)['models'] if m['name']=='mitos:latest'), 'mitos:latest não está instalado'))"
+  | python3 -c "import json,sys;print(next((m['digest'] for m in json.load(sys.stdin)['models'] if m['name']=='harness-gemma4-e4b-qat:latest'), 'não instalado'))"
 ```
-Cria o perfil de execução a partir do [`Modelfile`](Modelfile) da raiz. O segundo
+Cria o perfil de execução a partir do Modelfile versionado do perfil ativo. O
+[`Modelfile`](Modelfile) da raiz é o do perfil anterior (`mitos`, hoje Challenger),
+promovido para fora em 23/09/2026 pelo Gemma4 E4B QAT (41/50 contra 33/50). O segundo
 comando imprime o digest do manifesto que o Ollama atribuiu ao modelo instalado,
 e ele deve bater com `installation.installed_profile_digest_sha256` em
 `config/model-profiles.json` — divergência é erro na inicialização, não aviso. É
@@ -78,8 +82,8 @@ diferentes, e só um deles identifica os pesos e os parâmetros de fato instalad
 ```bash
 mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/harness-2"
 curl -fsSL \
-  https://huggingface.co/huihui-ai/Huihui-Qwen3.5-4B-abliterated/resolve/main/tokenizer.json \
-  -o "${XDG_STATE_HOME:-$HOME/.local/state}/harness-2/tokenizer.json"
+  https://huggingface.co/google/gemma-4-E4B-it/resolve/main/tokenizer.json \
+  -o "${XDG_STATE_HOME:-$HOME/.local/state}/harness-2/tokenizer-gemma4_e4b_qat_ollama.json"
 ```
 Baixa o `tokenizer.json` para o mesmo caminho que o setup vai sugerir por padrão
 (veja abaixo). Pode ir para qualquer outro caminho, desde que informe esse caminho
@@ -93,8 +97,10 @@ HuggingFace: sem o arquivo, a aplicação sobe com
 `EngineReadiness(ready=False, reason_code="tokenizer_file_missing")` e recusa
 execuções. O arquivo não é versionado neste repositório (é grande, e o conteúdo
 correto depende de qual revisão do modelo você instalou). Download direto:
-[`tokenizer.json`](https://huggingface.co/huihui-ai/Huihui-Qwen3.5-4B-abliterated/resolve/main/tokenizer.json)
-do repositório do modelo base.
+[`tokenizer.json`](https://huggingface.co/google/gemma-4-E4B-it/resolve/main/tokenizer.json)
+do repositório do modelo base do perfil ativo (`installation.tokenizer_url`). Trocar
+o perfil funcional troca o tokenizer: Acervos já indexados continuam válidos, mas
+os novos passam a ser divididos contando tokens do modelo novo.
 
 O SHA-256 do tokenizer **não é digitado no setup**: o harness calcula o digest do
 arquivo apontado e grava esse valor em `host.json#tokenizer_digest`, usado depois

@@ -11,10 +11,10 @@ def test_config_loader_reads_harness_profiles_and_tool_registry() -> None:
     assert config.loop.max_output_tokens == 8192
     assert config.default_execution_route == "local_web_tools"
     assert config.execution_route.id == "local_web_tools"
-    assert config.runtime_profile.model.id == "mitos:latest"
+    assert config.runtime_profile.model.id == "harness-gemma4-e4b-qat:latest"
     assert (
         config.runtime_profile.profile_digest_sha256
-        == "a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74"
+        == "bd0b01eca795c325997c317115539f6465193c1daece8579bc80a038d21a9a92"
     )
     assert config.context.initial_budget_tokens == 65536
     assert config.context.max_tool_read_bytes == 32768

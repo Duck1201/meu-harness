@@ -251,7 +251,12 @@ def main() -> int:
         dest="seeds",
         help="repeatable; defaults to the three recorded protocol seeds",
     )
-    parser.add_argument("--tokenizer", type=Path, default=ROOT / ".harness/tokenizer.json")
+    # O tokenizer é o do perfil da rota, pelo mesmo diretório que a bancada usa.
+    parser.add_argument(
+        "--tokenizer",
+        type=Path,
+        default=ROOT / f".harness/tokenizers/{load_config().runtime_profile.id}.json",
+    )
     arguments = parser.parse_args()
     if not arguments.tokenizer.is_file():
         print(f"tokenizer not found: {arguments.tokenizer}", file=sys.stderr)

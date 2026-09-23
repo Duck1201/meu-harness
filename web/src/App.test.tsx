@@ -35,7 +35,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Configurações" }));
     expect(screen.getByRole("heading", { name: "Configurações" })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("local_mitos_ollama_reproduction")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("gemma4_e4b_qat_ollama")).toBeInTheDocument();
   });
 
   it("chama o client para seleção, criação, fila, grants e feedback", async () => {
