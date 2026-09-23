@@ -61,11 +61,13 @@ exige alterar o documento, os contratos e as fixtures no mesmo commit.
 - **Autorização é por efeito, nunca por nome de tool**: `workspace_read` exige
   WorkspaceRootGrant; `workspace_write` exige também WriteGrant; `data_egress`
   exige WebAccessGrant; `corpus_read` exige CorpusGrant, que traz no escopo o
-  `corpus_id` que a Conversation pode ler; `pure_compute` não exige nada.
+  `corpus_id` que a Conversation pode ler; `pure_compute` e `local_inference`
+  não exigem nada (o segundo marca inferência de outro modelo local, ADR 0016).
   Adicionar um `if tool_name == ...` em caminho de policy está errado por
   construção — o mesmo vale para o roteamento tool -> executor, que também lê o
-  efeito. O gate vive em três executores independentes (`local_tools.py`,
-  `web_tools.py` e `corpus_tools.py`): grant novo exige tocar os três.
+  efeito. O gate vive em quatro executores independentes (`local_tools.py`,
+  `web_tools.py`, `corpus_tools.py` e `vision_tools.py`): grant novo exige tocar
+  os quatro. A política de caminho do Workspace é uma só, em `workspace_paths.py`.
 - **O modelo é não confiável**: seleção, argumentos e resultados passam por
   validação, autorização, confirmação e sandbox do harness. `blocked` só pode ser
   emitido pelo harness; recusa de provedor é `failed`; sucesso sem itens é `empty`.
@@ -106,7 +108,7 @@ Composition root em `api._default_service`, chamado por `create_app` quando nada
 | HTTP/SSE | `api.py`, `ag_ui.py`, `auth.py`, `setup.py` |
 | Orquestração | `application_service.py`, `agent_engine.py`, `workspace_coordinator.py` |
 | Portas | `ports.py` (Protocols), `domain.py` (tipos) |
-| Tools | `local_tools.py`, `web_tools.py`, `composite_tools.py`, `brave_browser.py`, `page_verification.py` |
+| Tools | `local_tools.py`, `web_tools.py`, `composite_tools.py`, `brave_browser.py`, `page_verification.py`, `vision_tools.py` + `vision_runtime.py` (ADR 0016), `workspace_paths.py` |
 | Estado | `conversation_store.py` (SQLite canônico), `observability_store.py` |
 | Contexto/modelo | `context_builder.py`, `system_prompt.py`, `token_estimator.py`, `ollama_runtime.py`, `llamacpp_runtime.py` (ADR 0013) |
 | Corpus | `corpus_tools.py` (executor do efeito), `corpus_service.py`, `corpus_store.py` (um SQLite por acervo), `corpus_ingestion.py`, `corpus_scraper.py`, `corpus_browser.py` (rota de browser, ADR 0014), `corpus_judge.py` (juiz consultivo Qwen3-Reranker via Ollama, ADR 0015) |

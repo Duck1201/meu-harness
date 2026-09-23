@@ -22,6 +22,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 - **Scrapling na coleta de Corpus**: limpeza de conteúdo oculto e rota de browser
   por sintoma com o EgressGuard em toda requisição, ambos desligados até medição
   ([ADR-0014](docs/adr/0014-corpus-browser-route-scrapling.md)).
+- **Visão local, desligada até medição**: `describe_image` lê uma imagem do
+  Workspace e pergunta ao Qwen3.5-2B local, fixado por digest; só texto volta,
+  com aviso de incerteza. 9/9 na bancada de `evals/vision` a temperatura 0
+  ([ADR-0016](docs/adr/0016-local-vision-tool.md)).
 - **Juiz consultivo do Corpus**: Qwen3-Reranker-0.6B via Ollama anota se cada
   passagem traz o fato pedido, desligado até o experimento
   ([ADR-0015](docs/adr/0015-corpus-answer-judge.md)).

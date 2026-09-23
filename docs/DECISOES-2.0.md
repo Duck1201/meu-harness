@@ -79,7 +79,8 @@ Nomes de tools não autorizam nada. A policy resolve os efeitos declarados no re
 - `workspace_write` exige WorkspaceRootGrant e WriteGrant;
 - `data_egress` exige WebAccessGrant e controles de destino, DNS e redirect;
 - `corpus_read` exige CorpusGrant, que nomeia em seu escopo o Corpus autorizado;
-- `pure_compute` não exige grant algum, porque não lê, não escreve e não sai do host.
+- `pure_compute` não exige grant algum, porque não lê, não escreve e não sai do host;
+- `local_inference` não exige grant próprio: é inferência de um segundo modelo local sobre algo que outro efeito já autorizou, e existe para a tool só ser oferecida com esse modelo configurado e gastar o orçamento cheio de chamadas ([ADR-0016](adr/0016-local-vision-tool.md)).
 
 WebAccessGrant não é consentimento para backend remoto. Conteúdo obtido da web recebe UntrustedWebTaint, que acompanha derivações e nunca cria grant, confirmação ou permissão. Uma página hostil pode instruir o modelo tanto a alterar arquivos quanto a levá-los embora numa consulta ou URL, então as duas pernas passam pela mesma confirmação enquanto o taint estiver no contexto, e um efeito desconhecido é tratado como se precisasse dela. Paths continuam relativos, canonicalizados, com symlinks resolvidos e confinados ao Workspace.
 
@@ -150,7 +151,7 @@ Verificação de página é InternalAutomation pós-escrita e nunca tool do mode
 
 A primeira superfície de produto é web e toda promoção exige tarefa fim a fim nessa superfície. Fixtures e experimentos declaram `dataset_version`, digest calculável e vínculo com RuntimeProfile e ExecutionRoute. Resultado de experimento pode ser ausente; inventar medição para preencher contrato é proibido.
 
-O que não entra, seus motivos e gates está em [`RELEASE-PENDING.md`](RELEASE-PENDING.md). Isso inclui vLLM, remoto, visão, shell, streaming, paralelismo, compressão de código, branching, approve-with-edits, dark mode e a retirada de Qwen2.5 do roadmap.
+O que não entra, seus motivos e gates está em [`RELEASE-PENDING.md`](RELEASE-PENDING.md). Isso inclui vLLM, remoto, shell, streaming, paralelismo, compressão de código, branching, approve-with-edits, dark mode e a retirada de Qwen2.5 do roadmap.
 
 ## Evidência preservada
 

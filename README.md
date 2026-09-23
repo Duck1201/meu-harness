@@ -362,7 +362,23 @@ cada chamada como `waived`, nunca como `approved`
 
 As tools expostas: `read_file`, `write_file`, `edit`, `list_directory`, `glob`,
 `grep_search`, `web_search`, `web_fetch`, `corpus_search`, `calculate`,
-`get_weather`.
+`get_weather` e, com a visão ligada, `describe_image`.
+
+### Visão: `describe_image`
+
+O modelo de chat não recebe imagens. `describe_image(file_path, question)` lê uma
+imagem PNG, JPEG ou WebP do Workspace e pergunta a um modelo de visão local, o
+Qwen3.5-2B, fixado por digest em `config/harness.json#vision`
+([ADR-0016](docs/adr/0016-local-vision-tool.md)). A resposta volta com um aviso de
+que números e texto miúdo podem estar errados. Nasce desligada:
+
+```bash
+ollama pull qwen3.5:2b-q4_K_M
+uv run python scripts/vision-bench.py    # mede o modelo nas imagens de evals/vision
+```
+
+e liga com `"mode": "enabled"` em `config/harness.json#vision`, depois que o
+experimento `vision_tool_enablement` passar.
 
 ### RAG: acervos por Corpus
 
