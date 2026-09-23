@@ -181,6 +181,9 @@ class RuntimeProfileConfig(ConfigModel):
     # chegar ao Operator como resposta.
     tool_markup_leak_markers: tuple[str, ...] = QWEN_TOOL_MARKUP
     reasoning_leak_markers: tuple[str, ...] = QWEN_REASONING_MARKUP
+    # Papel das automações internas no ModelView; `user` para o template que
+    # descarta mensagem de ferramenta sem chamada correspondente.
+    internal_automation_role: Literal["tool", "user"] = "tool"
 
     @property
     def context_window(self) -> int:

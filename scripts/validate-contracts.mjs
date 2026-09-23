@@ -242,6 +242,11 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
         `${profile.id}.${field}: deve ser lista de marcadores não vazios`,
       );
     }
+    check(
+      !Object.hasOwn(profile, "internal_automation_role") ||
+        ["tool", "user"].includes(profile.internal_automation_role),
+      `${profile.id}: internal_automation_role deve ser tool ou user`,
+    );
     const numCtx = Number(profile.installation?.parameters?.num_ctx);
     check(
       Number.isInteger(numCtx) && numCtx > 0,

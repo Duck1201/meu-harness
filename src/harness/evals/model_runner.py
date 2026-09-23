@@ -515,6 +515,7 @@ class ModelCaseRunner:
                         context_window=self._config.context.initial_budget_tokens,
                         output_budget=self._config.loop.max_output_tokens,
                         model_view_format=_model_view_format(spec.settings),
+                        automation_role=config.runtime_profile.internal_automation_role,
                     ),
                     event_sink=NullEventSink(),
                     confirmation_gate=WaivedWriteGate(store),

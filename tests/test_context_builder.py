@@ -305,3 +305,39 @@ def test_every_rendered_envelope_root_is_declared() -> None:
     assert envelopes
     for content in envelopes:
         assert any(content.startswith(tag) for tag in declared), content[:80]
+
+
+def test_internal_automation_reaches_the_model_in_the_role_the_profile_declares() -> None:
+    """O template do Gemma4 descarta `tool` sem chamada; a recuperação vai como `user`."""
+    turn = ContextTurn(
+        turn_id="current",
+        entries=(
+            entry(1, "current", CanonicalHistoryEntryKind.USER_MESSAGE, {"content": "pergunta"}),
+            entry(
+                2,
+                "current",
+                CanonicalHistoryEntryKind.INTERNAL_AUTOMATION,
+                {"automation_id": "corpus_retrieval", "passages": [{"text": "ERR_ORIGIN_2049"}]},
+            ),
+        ),
+    )
+
+    def roles(role: str) -> list[tuple[ModelRole, str]]:
+        builder = ContextBuilder(
+            FakeEstimator(),
+            context_window=32768,
+            automation_role="user" if role == "user" else "tool",
+        )
+        context = builder.build(
+            system="system", tool_schemas=(), completed_turns=(), current_turn=turn
+        )
+        return [(message.role, message.content) for message in context.messages[1:]]
+
+    as_tool = roles("tool")
+    as_user = roles("user")
+
+    assert as_tool[1][0] is ModelRole.TOOL
+    assert as_user[1][0] is ModelRole.USER
+    assert as_user[1][1].startswith("[corpus_retrieval] ")
+    assert "ERR_ORIGIN_2049" in as_user[1][1]
+    assert as_user[0] == as_tool[0]

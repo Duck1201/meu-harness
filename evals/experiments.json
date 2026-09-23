@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "ba3981480ad8a01f5fb76ee4106c31c1bae437c0ced8e0c060b9a5b385744985",
+  "manifest_digest_sha256": "b8c2533a1351b37cc86a4e36612401fd00581cb4672fd7235ff0407ebda06976",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -21,7 +21,7 @@
     "dataset_digest_sha256": "1008eced2d2d89119c9a993d36d50d9c64964cfe03efc6c6b83ce53af36c446b"
   },
   "contract_digests": {
-    "model_profiles_sha256": "54e3e3d08413b8bdf268adb4ef62988622000be1274b8ad1dc8e89a55fec49f8",
+    "model_profiles_sha256": "5db5e099a16adaae70f9cadf2b6696914d30e062604bc7fedb534072ede00b7f",
     "harness_sha256": "6a443252c3047ad594747d9cd6f525c672594bb896bd5a43759a9caae689030d",
     "tool_registry_sha256": "e1dbee48ce312924de041d3de7da7d3dd4b9f3e38be961df16618c5bbb53ff7c"
   },
@@ -2273,6 +2273,61 @@
         }
       ],
       "promotion_gate": "A Challenger replaces the functional profile only with higher complete-task success than mitos_control over the promotion protocol, zero security or taint violations, no increase in unsupported_claims, and latency the RX 7600 sustains at the 64k window. Arms whose model does not reason run with thinking off; that difference is part of the model, not a confound to remove. Finalists chosen from the 2026-09-22 pilot among the Challengers that fit the RX 7600 entirely: qwen35_9b scored 14/15 but runs 2 GB of its weights on the CPU at 20 tok/s and leaves no room for bge-m3 or the answer judge."
+    },
+    {
+      "id": "runtime_profile_final_round",
+      "status": "required_before_default_change",
+      "runtime_profile": "local_mitos_ollama_reproduction",
+      "execution_route": "local_web_tools",
+      "fixture_tags": [
+        "tool_selection",
+        "tool_noop",
+        "vision",
+        "retrieval_automation",
+        "corpus_answer"
+      ],
+      "fixed": {
+        "temperature": 0.3,
+        "presence_penalty": 0,
+        "max_steps": 15,
+        "max_tool_calls_per_step": 4,
+        "max_tool_calls_per_turn": 20,
+        "context_window_tokens": 65536,
+        "embedding_model": "bge-m3:latest"
+      },
+      "arms": [
+        {
+          "id": "mitos_control",
+          "runtime_profile": "local_mitos_ollama_reproduction",
+          "thinking": true
+        },
+        {
+          "id": "gemma4_e4b_qat",
+          "runtime_profile": "gemma4_e4b_qat_ollama",
+          "thinking": true
+        },
+        {
+          "id": "neohorse_4b",
+          "runtime_profile": "neohorse_4b_ollama",
+          "thinking": true
+        },
+        {
+          "id": "qwen35_4b_official",
+          "runtime_profile": "qwen35_4b_ollama",
+          "thinking": true
+        },
+        {
+          "id": "lfm25_26b",
+          "runtime_profile": "lfm25_26b_ollama",
+          "thinking": true
+        },
+        {
+          "id": "nemotron3_nano_4b",
+          "runtime_profile": "nemotron3_nano_4b_ollama",
+          "thinking": true
+        }
+      ],
+      "promotion_gate": "Last model round agreed with the Operator: a Challenger goes to promotion only if its pilot clearly beats the control; otherwise the functional profile stays and effort moves to the harness and a local fine-tune. Runs with the Markdown-aware oracle and with gemma4 fed internal automations as user messages. LFM2.5 thinks even with thinking off, so every arm runs with thinking on."
     },
     {
       "id": "corpus_answer_judge_advisory",

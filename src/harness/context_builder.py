@@ -68,6 +68,9 @@ class ModelContext:
     taints: frozenset[str]
 
 
+type AutomationRole = Literal["tool", "user"]
+
+
 class ContextBuilder:
     def __init__(
         self,
@@ -76,6 +79,7 @@ class ContextBuilder:
         context_window: int,
         output_budget: int = 8192,
         model_view_format: ModelViewFormat = "json",
+        automation_role: AutomationRole = "tool",
     ) -> None:
         if context_window <= output_budget:
             raise ValueError("context window must exceed output budget")
@@ -89,6 +93,12 @@ class ContextBuilder:
         # dois. O render XML continua construível porque agora é ele o braço
         # candidato: um braço que não pode ser executado não é braço, é lembrança.
         self._render_payload = _xml_document if model_view_format == "xml" else _json_document
+        # Em que papel uma automação interna — a recuperação do Corpus, a decisão
+        # do Operator — chega ao modelo. É do template, não do harness: o do Gemma4
+        # descarta mensagem `tool` que não responde a uma chamada dele, e com a
+        # passagem injetada assim ele respondia "forneça o manual" com o manual no
+        # contexto (medido, 2026-09-23). Como `user`, o mesmo modelo cita a passagem.
+        self._automation_role = automation_role
 
     @property
     def readiness(self) -> EngineReadiness:
@@ -135,7 +145,15 @@ class ContextBuilder:
         seen_payloads: dict[str, CanonicalHistoryEntry] = {}
         for turn in turns:
             for entry in turn.entries:
-                messages.append(_entry_message(entry, seen_payloads, self._render_payload))
+                message = _entry_message(entry, seen_payloads, self._render_payload)
+                if (
+                    entry.kind is CanonicalHistoryEntryKind.INTERNAL_AUTOMATION
+                    and self._automation_role == "user"
+                ):
+                    message = ModelMessage(
+                        role=ModelRole.USER, content=f"[{message.name}] {message.content}"
+                    )
+                messages.append(message)
         return tuple(messages)
 
 

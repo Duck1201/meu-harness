@@ -725,6 +725,7 @@ class ApplicationService:
                 self.estimator,
                 context_window=self.config.context.initial_budget_tokens,
                 output_budget=self.config.loop.max_output_tokens,
+                automation_role=self.config.runtime_profile.internal_automation_role,
             ),
             event_sink=self._event_sink,
             # An engine is built per Turn, so a conversation that crosses midnight
