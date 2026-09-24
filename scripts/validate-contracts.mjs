@@ -223,12 +223,12 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
   // nenhuma rota de produção o seleciona e ele não entra em release sem promoção.
   for (const profile of profiles) {
     check(
-      ["functional", "challenger"].includes(profile.status),
-      `${profile.id}: status deve ser functional ou challenger`,
+      ["functional", "challenger", "retired"].includes(profile.status),
+      `${profile.id}: status deve ser functional, challenger ou retired`,
     );
     check(
-      profile.status !== "challenger" || profile.release_eligible === false,
-      `${profile.id}: challenger não é elegível para release`,
+      profile.status === "functional" || profile.release_eligible === false,
+      `${profile.id}: challenger e retired não são elegíveis para release`,
     );
     check(
       runtimeBackends.has(profile.runtime?.backend),
@@ -384,7 +384,10 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
   // Todo perfil Ollama nasce de um Modelfile versionado: o do funcional e o de cada
   // Challenger, com as mesmas regras — senão a tag sobe com o num_ctx padrão do
   // Ollama e o braço é medido numa janela que o contrato nunca declarou.
-  for (const ollamaProfile of profiles.filter((profile) => profile.runtime?.backend === "ollama")) {
+  // Perfil `retired` é registro de medição: o modelo saiu do host e o Modelfile do repo.
+  for (const ollamaProfile of profiles.filter(
+    (profile) => profile.runtime?.backend === "ollama" && profile.status !== "retired",
+  )) {
     const activeProfile = ollamaProfile;
     const modelfilePath = path.join(root, activeProfile.installation.repository_modelfile);
     check(fs.existsSync(modelfilePath), `${activeProfile.id}: Modelfile ausente`);

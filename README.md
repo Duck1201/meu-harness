@@ -69,9 +69,10 @@ ollama create harness-gemma4-e4b-qat -f modelfiles/gemma4_e4b_qat_ollama.Modelfi
 curl -s http://127.0.0.1:11434/api/tags \
   | python3 -c "import json,sys;print(next((m['digest'] for m in json.load(sys.stdin)['models'] if m['name']=='harness-gemma4-e4b-qat:latest'), 'não instalado'))"
 ```
-Cria o perfil de execução a partir do Modelfile versionado do perfil ativo. O
-[`Modelfile`](Modelfile) da raiz é o do perfil anterior (`mitos`, hoje Challenger),
-promovido para fora em 23/09/2026 pelo Gemma4 E4B QAT (41/50 contra 33/50). O segundo
+Cria o perfil de execução a partir do Modelfile versionado do perfil ativo. O Gemma4
+E4B QAT é o modelo core desde 23/09/2026: superou o `mitos` (41/50 contra 33/50), que
+foi aposentado junto com os demais Challengers (`status: retired` em
+`config/model-profiles.json`, modelos e Modelfiles removidos). O segundo
 comando imprime o digest do manifesto que o Ollama atribuiu ao modelo instalado,
 e ele deve bater com `installation.installed_profile_digest_sha256` em
 `config/model-profiles.json` — divergência é erro na inicialização, não aviso. É

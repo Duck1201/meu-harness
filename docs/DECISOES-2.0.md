@@ -14,7 +14,7 @@ Os contratos consumíveis por código são:
 - [`config/harness.json`](../config/harness.json), fonte de ExecutionRoutes, limites, policy, estado, stores, rede e UX;
 - [`config/tool-registry.json`](../config/tool-registry.json), fonte única de `model_tools`, `internal_automations`, `prohibited_capabilities`, schemas e ResultPayload;
 - [`evals/fixtures/regressions.json`](../evals/fixtures/regressions.json) e [`evals/experiments.json`](../evals/experiments.json), contratos versionados de avaliação;
-- [`Modelfile`](../Modelfile), entrada da instalação Ollama local.
+- [`modelfiles/gemma4_e4b_qat_ollama.Modelfile`](../modelfiles/gemma4_e4b_qat_ollama.Modelfile), entrada da instalação Ollama do perfil core. Os Challengers foram aposentados (`status: retired`): o mitos e os demais foram superados pelo Gemma 4 E4B QAT.
 
 Em divergência, prevalecem: invariantes de segurança deste documento, contratos JSON e demais decisões desta página, nessa ordem. Alterar uma decisão exige atualizar contratos, fixtures e digests no mesmo conjunto.
 

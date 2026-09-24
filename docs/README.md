@@ -18,7 +18,7 @@ automaticamente ao roadmap.
 
 ## Contratos executáveis
 
-- [Modelfile do perfil local](../Modelfile)
+- [Modelfile do perfil core (Gemma 4 E4B QAT)](../modelfiles/gemma4_e4b_qat_ollama.Modelfile)
 - [RuntimeProfiles e evidência](../config/model-profiles.json)
 - [Configuração normativa do harness](../config/harness.json)
 - [Registry canônico de tools, automações e proibições](../config/tool-registry.json)

@@ -60,7 +60,8 @@
   "runtime_profiles": [
     {
       "id": "local_mitos_ollama_reproduction",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "a726cef53a75e7def1272308967d836c4c61092760feea3782a6007882ba5a74",
       "model": {
@@ -232,7 +233,8 @@
     },
     {
       "id": "qwen35_9b_ollama",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "120f1120724c1343270c1b17177172b785e6e183ce4f3e4101f63ed2c30425af",
       "model": {
@@ -602,7 +604,8 @@
     },
     {
       "id": "agents_a1_4b_llamacpp",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "d93c393a9bd5139a4b5cfe24d31ef553c5a497bfb8afec178a354ecbf508f062",
       "model": {
@@ -792,7 +795,8 @@
     },
     {
       "id": "cove_4b_llamacpp",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "48f857bd80ed52d1fddb2da8dfff72114d59d3e8d2eb7c025e3519a455aa4458",
       "model": {
@@ -982,7 +986,8 @@
     },
     {
       "id": "granite41_8b_ollama",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "4dc873bed62bad5afb19ca5d54f737a54ed36fdf1ff801f713dbadd26169427e",
       "model": {
@@ -1161,7 +1166,8 @@
     },
     {
       "id": "gemma4_e4b_toolcall_llamacpp",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "e5c4501fc23c77bc890541a4db4bdde7f7e77f4d4cbbe4039113c0435d0df63c",
       "model": {
@@ -1367,7 +1373,8 @@
     },
     {
       "id": "neohorse_4b_ollama",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "286cd51ba2308ae860bad4ec9aca2db388fa0fd1967fe92c34a3780e8c4573fa",
       "model": {
@@ -1546,7 +1553,8 @@
     },
     {
       "id": "qwen35_4b_ollama",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "8d530fae4a1e86b011293d7663f8dcc65e5f406ec78f0290a2b8c81b74552fa9",
       "model": {
@@ -1725,7 +1733,8 @@
     },
     {
       "id": "lfm25_26b_ollama",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "aa0f0a53d49efa85c2f3ca5a515105755e491e91d4a83b9d0f392d6c3e0ed4cc",
       "model": {
@@ -1913,7 +1922,8 @@
     },
     {
       "id": "nemotron3_nano_4b_ollama",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
       "release_eligible": false,
       "profile_digest_sha256": "e49695a743f699ae63d1cefe6e108b6181ffa7b07dfbfbc91d32cf12224dfa28",
       "model": {
