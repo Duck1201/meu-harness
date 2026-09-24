@@ -218,10 +218,10 @@
     "answer_judge": {
       "mode": "advisory",
       "threshold": 0.5,
-      "model": "Qwen/Qwen3-Reranker-0.6B",
-      "ollama_tag": "hf.co/mradermacher/Qwen3-Reranker-0.6B-GGUF:Q8_0",
-      "ollama_digest": "5a1ea3ab8b66e04d9ae7559c4861d75cb1c6dfe358dff5ef142c58c6d4ffa6c8",
-      "gguf_sha256": "c525a7449243f690a7062e6377d6cf5adbb289354bd4316312367cd20e187ab7",
+      "model": "harness-judge-ptbr-v2 (Qwen3-Reranker-0.6B + LoRA pt-BR, ~/judge-train runs/mix4)",
+      "ollama_tag": "harness-judge-ptbr-v2:latest",
+      "ollama_digest": "a8fcf3c4db72ccf168a0529d2ca288a7430cb59ed3177d9285c25a1918be31a9",
+      "gguf_sha256": "1c84b9bbe0630620b89d6ebd1a15037340cafd08b0482ffbf5c3404bcfc068fd",
       "scoring": "raw_prompt_yes_vs_no_logprob",
       "device": "gpu_via_ollama",
       "adr": "docs/adr/0015-corpus-answer-judge.md"

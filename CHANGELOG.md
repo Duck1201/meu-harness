@@ -41,6 +41,9 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
   cada passagem traz o fato pedido e avisa o modelo quando nenhuma traz. Promovido
   com 49/50 contra 45/50 e `unsupported_claims` 0 contra 1; exige
   `OLLAMA_MAX_LOADED_MODELS=3` ([ADR-0015](docs/adr/0015-corpus-answer-judge.md)).
+  O juiz é o `harness-judge-ptbr-v2`, LoRA pt-BR treinado em `~/judge-train`: AUC 0,956
+  contra 0,828 do original na bancada de 168 pares, e na promoção `unsupported_claims`
+  0 contra 3.
 
 ### Corrigido
 

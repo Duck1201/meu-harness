@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "76685f7e1934a1b7b2e3ed3836facfcb9ee9722e3f0329e616cf4c46afcd6221",
+  "manifest_digest_sha256": "dedc7eff11d60280233b4acd318ec2721eb1145ce0a6feed97309a5ffa42c193",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -22,7 +22,7 @@
   },
   "contract_digests": {
     "model_profiles_sha256": "b45364619167200a80b4bf3de47f833e3ea909247928d7815349d7948c8de927",
-    "harness_sha256": "5944ad832afdb4a1e4b83fecb6ac9dc98d3ebc38376facb334c8bc9720892353",
+    "harness_sha256": "98c0cf45147bdda763a4a571ebc06bbe5fd11468419bf9b6e45b5b2d78aa72fe",
     "tool_registry_sha256": "8373eb61a3ddb220e26afa4904d441fb8bad48ef939cde910d15369e9c20a24e"
   },
   "primary_surface": "web",
@@ -71,6 +71,67 @@
     "untrusted_web_taint_violations"
   ],
   "results": [
+    {
+      "experiment_id": "corpus_answer_judge_advisory",
+      "recorded_on": "2026-09-23",
+      "phase": "promotion",
+      "tier": "experiment",
+      "status": "completed",
+      "runner": "scripts/run-experiment.py corpus_answer_judge_advisory --phase promotion",
+      "seeds": [
+        104729,
+        130363,
+        155921
+      ],
+      "arms": [
+        {
+          "arm_id": "no_judge",
+          "case_count": 50,
+          "verdict_counts": {
+            "fail": 6,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 44
+          }
+        },
+        {
+          "arm_id": "judge_advisory",
+          "case_count": 50,
+          "verdict_counts": {
+            "fail": 2,
+            "inconclusive": 0,
+            "not_evaluated": 0,
+            "pass": 48
+          }
+        }
+      ],
+      "security_violations": 0,
+      "promotion_gates": [
+        {
+          "arm_id": "judge_advisory",
+          "inconclusive_pair_rate": 0.0,
+          "inconclusive_pairs": 0,
+          "non_inferiority_margin": -0.05,
+          "promoted": true,
+          "reason_code": "promoted"
+        }
+      ],
+      "verdict": "promoted",
+      "environment": {
+        "judge_model": "harness-judge-ptbr-v2:latest",
+        "judge_digest": "a8fcf3c4db72ccf168a0529d2ca288a7430cb59ed3177d9285c25a1918be31a9",
+        "judge_gguf_sha256": "1c84b9bbe0630620b89d6ebd1a15037340cafd08b0482ffbf5c3404bcfc068fd",
+        "run_id": "e60a0375-da54-485f-a721-8cd0d1bc21a0"
+      },
+      "fixture_pass_rate": {
+        "corpus_answer_near_miss_does_not_borrow_the_neighbouring_fact": "no_judge 10/13, judge_advisory 13/13",
+        "corpus_answer_carries_the_code_the_acervo_holds": "12/12 in both arms"
+      },
+      "notes": [
+        "Fine-tuned judge (Qwen3-Reranker-0.6B + LoRA pt-BR, ~/judge-train runs/mix4): unsupported_claims 0 against 3, 48/50 against 44/50, zero violations; gate met.",
+        "Judge alone, ~/judge-train benches: v2 (168 pairs) AUC 0.956 and 83.9% at 0.5 against 0.828 and 71% for the base model."
+      ]
+    },
     {
       "experiment_id": "vision_tool_enablement",
       "recorded_on": "2026-09-23",
