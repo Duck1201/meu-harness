@@ -32,6 +32,10 @@ type AddressInfo = tuple[int, int, int, str, SocketAddress]
 type AddressLookup = Callable[[str, int, int, int], Awaitable[Sequence[AddressInfo]]]
 
 _USER_AGENT = "Harness/2.0 (+https://localhost.invalid/harness)"
+# O HTML lite do DuckDuckGo é página para gente: com o User-Agent de ferramenta
+# acima, ele responde 202 e o desafio anti-bot em toda busca (medido em
+# 29/09/2026). Com um de navegador, só em rajada.
+_BROWSER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _HTML_CONTENT_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 _TEXT_CONTENT_TYPES = frozenset(
@@ -716,6 +720,7 @@ class WebToolExecutor:
             request_url,
             accept="text/html",
             guard=self._egress_guard,
+            user_agent=_BROWSER_USER_AGENT,
         )
         if response is None:
             return _provider_error(
@@ -723,6 +728,17 @@ class WebToolExecutor:
                 "provider_unavailable",
                 "No search provider could be reached.",
                 retryable=True,
+            )
+        if _is_duckduckgo_challenge(response.status, response.body):
+            # Era lido como zero resultados: o modelo ouvia "não existe nada
+            # sobre isso" quando a busca nem tinha rodado.
+            return _provider_error(
+                call,
+                "provider_blocked",
+                "The search did not run: DuckDuckGo answered with its anti-bot "
+                "challenge instead of results. This says nothing about whether "
+                "pages exist; tell the Operator the search is unavailable right now.",
+                retryable=False,
             )
         if response.status == 429:
             return _provider_error(
@@ -747,6 +763,7 @@ class WebToolExecutor:
         *,
         accept: str,
         guard: EgressGuard,
+        user_agent: str = _USER_AGENT,
     ) -> HttpResponse | None:
         """One guarded GET. None means "this provider did not answer usefully"."""
         try:
@@ -754,7 +771,7 @@ class WebToolExecutor:
                 target = await guard.resolve(request_url)
                 return await self._http_transport.request(
                     target,
-                    headers={"Accept": accept, "User-Agent": _USER_AGENT},
+                    headers={"Accept": accept, "User-Agent": user_agent},
                     max_bytes=self._max_response_bytes,
                     timeout_seconds=self._timeout_seconds,
                 )
@@ -1240,6 +1257,11 @@ def _parse_searxng_results(
             }
         )
     return results, len(raw_result_items) > limit
+
+
+def _is_duckduckgo_challenge(status: int, body: bytes) -> bool:
+    """202 ou o formulário de /anomaly.js: o desafio anti-bot, não uma página de resultados."""
+    return status == 202 or b"anomaly.js" in body or b"anomaly-modal" in body
 
 
 def _parse_duckduckgo_results(body: bytes, *, limit: int) -> tuple[list[dict[str, str]], bool]:

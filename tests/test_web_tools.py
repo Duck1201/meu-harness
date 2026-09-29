@@ -584,6 +584,38 @@ def test_web_search_falls_back_to_duckduckgo_when_searxng_does_not_answer() -> N
         ]
         assert len(transport.requests) == 2
         assert transport.requests[1][0].url.startswith("https://lite.duckduckgo.com/lite/?")
+        # Com o User-Agent de ferramenta o lite responde o desafio anti-bot sempre.
+        assert transport.requests[1][1]["User-Agent"].startswith("Mozilla/5.0")
+
+    asyncio.run(scenario())
+
+
+def test_the_duckduckgo_challenge_is_a_failed_search_not_an_empty_one() -> None:
+    """Visto num Turn real: 0 resultados, e o modelo disse que a busca ainda rodava."""
+
+    async def scenario() -> None:
+        challenge = (
+            b'<html><body><form id="challenge-form" action="//duckduckgo.com/anomaly.js?sv=html">'
+            b'<div class="anomaly-modal__mask"></div></form></body></html>'
+        )
+        transport = FakeHttpTransport(
+            (HttpResponse(status=202, headers={"Content-Type": "text/html"}, body=challenge),)
+        )
+        executor = WebToolExecutor(
+            registry=load_config().tool_registry,
+            session_policy=web_policy("WebAccessGrant"),
+            egress_guard=public_guard(),
+            http_transport=transport,
+        )
+
+        result = await executor.execute(
+            ToolCall(id="search-1", name="web_search", arguments={"query": "urubu do pix"})
+        )
+
+        assert result.status.value == "failed"
+        assert result.error is not None
+        assert result.error["code"] == "provider_blocked"
+        assert result.retryable is False
 
     asyncio.run(scenario())
 

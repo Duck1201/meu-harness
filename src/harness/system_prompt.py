@@ -55,6 +55,14 @@ _MUTATION_DIRECTNESS = (
     "same tool again with different arguments to look for it."
 )
 
+# Num Turn real a busca voltou vazia e o modelo respondeu "iniciei a busca,
+# aguarde": leu o resultado como algo que ainda estava rodando.
+_RESULTS_ARE_FINAL = (
+    "Every tool result is final: nothing keeps running after it, so never tell the "
+    "Operator to wait for results. If a search returns nothing, try once with other "
+    "words, then say plainly that nothing was found; if a tool failed, say it failed."
+)
+
 
 # The one line that is not derived from a contract: the host knows the date and the
 # model does not. It is a decision of the Operator, not a measurement — no run has
@@ -145,7 +153,15 @@ def build_system_prompt(
     # um espaço sobrando no fim e o prompt sem bloco deixaria de ser o de sempre.
     extra = [operator_notes] if operator_notes else []
     return " ".join(
-        [_BASE, _RESULT_AUTHORITY, _MUTATION_DIRECTNESS, _current_date(today), *limits, *extra]
+        [
+            _BASE,
+            _RESULT_AUTHORITY,
+            _MUTATION_DIRECTNESS,
+            _RESULTS_ARE_FINAL,
+            _current_date(today),
+            *limits,
+            *extra,
+        ]
     )
 
 
