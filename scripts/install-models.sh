@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Reinstala no Ollama todos os modelos que o Meu Harness usa.
 #
-#   - gemma4:e4b-it-qat  -> base do perfil core
-#   - harness-gemma4-e4b-qat  <- modelfiles/gemma4_e4b_qat_ollama.Modelfile
-#   - bge-m3:latest      -> embedding do Corpus
-#   - qwen3.5:2b-q4_K_M  -> tool de visão (ADR 0016)
-#   - harness-judge-ptbr-v2  <- modelfiles/harness_judge_ptbr_v2.Modelfile (ADR 0015)
+#   tag derivada               Modelfile                               base oficial
+#   harness-gemma4-e4b-qat     modelfiles/gemma4_e4b_qat_ollama        gemma4:e4b-it-qat   (perfil core)
+#   harness-bge-m3             modelfiles/bge_m3_embedding             bge-m3:latest       (embedding do Corpus)
+#   harness-vision-qwen35-2b   modelfiles/qwen35_2b_vision             qwen3.5:2b-q4_K_M   (visão, ADR 0016)
+#   harness-judge-ptbr-v2      modelfiles/harness_judge_ptbr_v2        GGUF do ~/judge-train (ADR 0015)
 #
 # Idempotente: pull de modelo já presente só confere o manifest.
 set -euo pipefail
@@ -18,6 +18,8 @@ for tag in gemma4:e4b-it-qat bge-m3:latest qwen3.5:2b-q4_K_M; do
 done
 
 ollama create harness-gemma4-e4b-qat -f modelfiles/gemma4_e4b_qat_ollama.Modelfile
+ollama create harness-bge-m3 -f modelfiles/bge_m3_embedding.Modelfile
+ollama create harness-vision-qwen35-2b -f modelfiles/qwen35_2b_vision.Modelfile
 
 judge_gguf=$(sed -n 's/^FROM //p' modelfiles/harness_judge_ptbr_v2.Modelfile)
 if [[ -f "$judge_gguf" ]]; then

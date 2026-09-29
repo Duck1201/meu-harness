@@ -7,8 +7,8 @@
   "tool_registry": "config/tool-registry.json",
   "vision": {
     "mode": "enabled",
-    "ollama_tag": "qwen3.5:2b-q4_K_M",
-    "ollama_digest": "124a03c347777e8e4e5955c33610ae01d9d90d8c2a718bfba069c498d5c7f3c9",
+    "ollama_tag": "harness-vision-qwen35-2b:latest",
+    "ollama_digest": "19ee7c2ea1fcffa27952193311640793292577c7684ff8a54b57b6a6f8001d83",
     "max_image_bytes": 10485760,
     "accepted_formats": ["png", "jpeg", "webp"],
     "max_output_tokens": 700,

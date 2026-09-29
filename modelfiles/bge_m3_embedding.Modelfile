@@ -1,0 +1,6 @@
+# Meu Harness — embedding do Corpus (harness-bge-m3).
+#
+# Só o FROM, de propósito: os Corpora gravam o modelo com que foram indexados e
+# o piso de similaridade (0.53) foi medido nestes vetores. Qualquer PARAMETER
+# aqui pode mudar o vetor e exige reindexar os acervos e remedir o piso.
+FROM bge-m3:latest

@@ -1682,7 +1682,7 @@ function CorpusArea({ client }: { client: HarnessClient }) {
           <h1>Nenhum modelo de embedding disponível</h1>
           <p>
             O RuntimeProfile ativo não declara um modelo de embedding, ou ele não está
-            instalado no Ollama. Instale-o com <code>ollama pull bge-m3</code> e reinicie o
+            instalado no Ollama. Instale-o com <code>scripts/install-models.sh</code> e reinicie o
             servidor.
           </p>
         </div>

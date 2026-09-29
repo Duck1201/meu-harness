@@ -63,11 +63,18 @@ corepack enable && cd web && pnpm install && pnpm build && cd ..
 ```
 Gera `web/dist`, servido pelo próprio backend.
 
-Para reinstalar de uma vez todos os modelos que o harness usa — o perfil core, o
-embedding `bge-m3:latest` do Corpus, o `qwen3.5:2b-q4_K_M` da tool de visão e o juiz
-`harness-judge-ptbr-v2` (de
-[`modelfiles/harness_judge_ptbr_v2.Modelfile`](modelfiles/harness_judge_ptbr_v2.Modelfile)) —
-rode `scripts/install-models.sh`. Só o perfil core, à mão:
+Para reinstalar de uma vez todos os modelos que o harness usa, rode
+`scripts/install-models.sh`. Cada um é uma tag `harness-*` criada de um Modelfile
+versionado em [`modelfiles/`](modelfiles/) sobre a base oficial:
+
+| Tag | Modelfile | Base | Papel |
+|---|---|---|---|
+| `harness-gemma4-e4b-qat` | `gemma4_e4b_qat_ollama.Modelfile` | `gemma4:e4b-it-qat` | perfil core |
+| `harness-bge-m3` | `bge_m3_embedding.Modelfile` | `bge-m3:latest` | embedding do Corpus |
+| `harness-vision-qwen35-2b` | `qwen35_2b_vision.Modelfile` | `qwen3.5:2b-q4_K_M` | tool de visão |
+| `harness-judge-ptbr-v2` | `harness_judge_ptbr_v2.Modelfile` | GGUF do `~/judge-train` | juiz do Corpus |
+
+Só o perfil core, à mão:
 
 ```bash
 ollama pull gemma4:e4b-it-qat
@@ -379,6 +386,7 @@ que números e texto miúdo podem estar errados. Vem ligada desde a promoção d
 
 ```bash
 ollama pull qwen3.5:2b-q4_K_M
+ollama create harness-vision-qwen35-2b -f modelfiles/qwen35_2b_vision.Modelfile
 uv run python scripts/vision-bench.py                  # mede nas imagens de evals/vision
 uv run python scripts/vision-bench.py --cases <pasta>  # mede nos seus prints (cases.json + imagens)
 ```
@@ -403,8 +411,9 @@ do modelo responder, a resposta cita `[1]`, `[2]` e o card do turno mostra o tre
 literal com o documento, a seção e a página. Passagem coletada da web fica marcada
 e faz o harness voltar a pedir confirmação para sair de novo à rede.
 
-O modelo de embedding é o `bge-m3` (`ollama pull bge-m3`), declarado com digest
-próprio em `config/model-profiles.json`. Sem ele instalado, a aba diz isso em vez
+O modelo de embedding é o `bge-m3`, instalado como `harness-bge-m3` (`ollama pull
+bge-m3` e `ollama create harness-bge-m3 -f modelfiles/bge_m3_embedding.Modelfile`),
+declarado com digest próprio em `config/model-profiles.json`. Sem ele instalado, a aba diz isso em vez
 de fingir um acervo vazio.
 
 Dois interruptores em `config/harness.json#corpus` mudam a coleta

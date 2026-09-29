@@ -206,7 +206,7 @@ def test_the_corpora_snapshot_carries_what_the_tab_needs(tmp_path: Path) -> None
         snapshot = client.get("/api/ui/corpora").json()
 
     assert snapshot["available"] is True
-    assert snapshot["embedding_model"] == "bge-m3:latest"
+    assert snapshot["embedding_model"] == "harness-bge-m3:latest"
     assert ".pdf" in snapshot["accepted_extensions"]
     assert snapshot["corpora"][0]["description"] == "notas"
     assert snapshot["jobs"] == []

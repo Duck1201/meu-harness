@@ -434,8 +434,8 @@
         "reasoning_parser": "gemma4"
       },
       "embedding": {
-        "id": "bge-m3:latest",
-        "digest_sha256": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
+        "id": "harness-bge-m3:latest",
+        "digest_sha256": "f17fbbb34ef71b82465519d25b0233ad64926968e18fd5eea0e7f111a2b65a93",
         "family": "bert",
         "parameter_size": "566.70M",
         "quantization": "F16",
@@ -443,7 +443,7 @@
         "max_input_tokens": 8192,
         "endpoint": "/api/embed",
         "multilingual": true,
-        "observed_on": "2026-08-12"
+        "observed_on": "2026-09-28"
       },
       "installation": {
         "observed_on": "2026-09-22",
@@ -501,10 +501,10 @@
           "id": "embedding_model",
           "evidence": {
             "kind": "digest_sha256",
-            "subject": "bge-m3:latest served by the same Ollama installation",
-            "sha256": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
-            "provenance": "Modelo separado do chat, instalado por `ollama pull bge-m3`. Digest lido em /api/tags em 2026-08-12; 1024 dimensões confirmadas por uma chamada a /api/embed.",
-            "verify": "curl -s http://127.0.0.1:11434/api/tags | grep bge-m3"
+            "subject": "harness-bge-m3:latest served by the same Ollama installation",
+            "sha256": "f17fbbb34ef71b82465519d25b0233ad64926968e18fd5eea0e7f111a2b65a93",
+            "provenance": "Modelo separado do chat, criado de modelfiles/bge_m3_embedding.Modelfile sobre `bge-m3:latest` (digest 7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab). Digest lido em /api/tags em 2026-09-28; vetores idênticos aos da base (diferença máxima 0.0 em /api/embed), 1024 dimensões.",
+            "verify": "curl -s http://127.0.0.1:11434/api/tags | grep harness-bge-m3"
           }
         },
         {
