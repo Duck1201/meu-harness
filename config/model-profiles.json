@@ -603,6 +603,563 @@
       ]
     },
     {
+      "id": "gemma4_e4b_q8_ollama",
+      "internal_automation_role": "user",
+      "status": "challenger",
+      "release_eligible": false,
+      "profile_digest_sha256": "64eef41c8d7dc40331b5077af75a39305518c1ebd73f830fba57458efe38c860",
+      "model": {
+        "id": "harness-gemma4-e4b-q8:latest",
+        "base_model": "gemma4:e4b-it-q8_0",
+        "family": "gemma4-e4b",
+        "variant": "official-q8",
+        "architecture": "gemma4",
+        "parameter_size": "7.5B",
+        "quantization": "Q8_0"
+      },
+      "runtime": {
+        "backend": "ollama",
+        "version": "0.32.5",
+        "renderer": "gemma4",
+        "tool_parser": "gemma4",
+        "reasoning_parser": "gemma4"
+      },
+      "embedding": {
+        "id": "harness-bge-m3:latest",
+        "digest_sha256": "f17fbbb34ef71b82465519d25b0233ad64926968e18fd5eea0e7f111a2b65a93",
+        "family": "bert",
+        "parameter_size": "566.70M",
+        "quantization": "F16",
+        "dimensions": 1024,
+        "max_input_tokens": 8192,
+        "endpoint": "/api/embed",
+        "multilingual": true,
+        "observed_on": "2026-09-28"
+      },
+      "installation": {
+        "observed_on": "2026-09-29",
+        "installed_tag": "harness-gemma4-e4b-q8:latest",
+        "installed_profile_digest_sha256": "64eef41c8d7dc40331b5077af75a39305518c1ebd73f830fba57458efe38c860",
+        "repository_modelfile": "modelfiles/gemma4_e4b_q8_ollama.Modelfile",
+        "repository_modelfile_sha256": "b87953d6798935853e67db7c3e231e5ec5c48bd0adb08916dff721b99e5a6a49",
+        "matches_repository_modelfile": true,
+        "parameters": {
+          "num_ctx": "65536",
+          "temperature": "0.3",
+          "presence_penalty": "0",
+          "top_k": "20",
+          "top_p": "0.8"
+        },
+        "tokenizer_url": "https://huggingface.co/google/gemma-4-E4B-it/resolve/main/tokenizer.json"
+      },
+      "components": [
+        {
+          "id": "model_weights",
+          "evidence": {
+            "kind": "embedded_in_profile",
+            "subject": "model_weights",
+            "profile_digest_sha256": "64eef41c8d7dc40331b5077af75a39305518c1ebd73f830fba57458efe38c860",
+            "observed_via": "ollama_tags"
+          }
+        },
+        {
+          "id": "modelfile",
+          "evidence": {
+            "kind": "digest_sha256",
+            "subject": "gemma4_e4b_q8_ollama.Modelfile",
+            "sha256": "b87953d6798935853e67db7c3e231e5ec5c48bd0adb08916dff721b99e5a6a49"
+          }
+        },
+        {
+          "id": "tokenizer",
+          "evidence": {
+            "kind": "embedded_in_profile",
+            "subject": "tokenizer",
+            "profile_digest_sha256": "64eef41c8d7dc40331b5077af75a39305518c1ebd73f830fba57458efe38c860",
+            "observed_via": "ollama_show"
+          }
+        },
+        {
+          "id": "token_estimator_tokenizer_file",
+          "evidence": {
+            "kind": "digest_sha256",
+            "subject": ".harness/tokenizers/gemma4_e4b_q8_ollama.json read by HuggingFaceTokenEstimator",
+            "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+            "provenance": "Host-local, não versionado; baixado de https://huggingface.co/google/gemma-4-E4B-it/resolve/main/tokenizer.json em 2026-09-22."
+          }
+        },
+        {
+          "id": "embedding_model",
+          "evidence": {
+            "kind": "digest_sha256",
+            "subject": "harness-bge-m3:latest served by the same Ollama installation",
+            "sha256": "f17fbbb34ef71b82465519d25b0233ad64926968e18fd5eea0e7f111a2b65a93",
+            "provenance": "Modelo separado do chat, criado de modelfiles/bge_m3_embedding.Modelfile sobre `bge-m3:latest` (digest 7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab). Digest lido em /api/tags em 2026-09-28; vetores idênticos aos da base (diferença máxima 0.0 em /api/embed), 1024 dimensões.",
+            "verify": "curl -s http://127.0.0.1:11434/api/tags | grep harness-bge-m3"
+          }
+        },
+        {
+          "id": "chat_template",
+          "evidence": {
+            "kind": "embedded_in_profile",
+            "subject": "chat_template",
+            "profile_digest_sha256": "64eef41c8d7dc40331b5077af75a39305518c1ebd73f830fba57458efe38c860",
+            "observed_via": "ollama_show"
+          }
+        }
+      ],
+      "hardware_evidence": {
+        "gpu": "AMD Radeon RX 7600",
+        "vram_gib": 7.98,
+        "source": "Bake-off 2026-09-29 (replay de 8 Turns reais do Operator × 3 + model_smoke): 7308 MiB de VRAM com visão e embedding carregados, 31 tok/s de geração, 34 s por resposta (mediana), 20/24 acertos conferidos à mão, model_smoke 99/105. Não supera o Q4_0 QAT (20/24, 103/105, 19 s)."
+      },
+      "capabilities": {
+        "structured_tool_calls": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "Challenger ainda não medido no digest exato; a medição do Q4_0 QAT não se transfere"
+          },
+          "gate_status": "pending"
+        },
+        "reasoning": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "Challenger ainda não medido no digest exato; a medição do Q4_0 QAT não se transfere"
+          },
+          "gate_status": "pending"
+        },
+        "vision": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "sem medição no digest exato"
+          },
+          "gate_status": "pending"
+        },
+        "embeddings": {
+          "support": "supported",
+          "evidence": {
+            "kind": "local_measurement",
+            "source": "POST /api/embed em bge-m3:latest devolveu 1024 dimensões (2026-08-12)"
+          },
+          "gate_status": "pending"
+        },
+        "usage_tokens": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "Challenger ainda não medido no digest exato; a sonda de 2026-09-22 foi no Q4_0 QAT"
+          },
+          "gate_status": "pending"
+        },
+        "streaming": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "docs/RELEASE-PENDING.md"
+          },
+          "gate_status": "pending"
+        },
+        "parallel_tool_calls": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "docs/RELEASE-PENDING.md"
+          },
+          "gate_status": "pending"
+        }
+      },
+      "tool_markup_leak_markers": [
+        "<|tool_call>",
+        "<tool_call|>",
+        "<|tool_response>",
+        "<tool_response|>"
+      ],
+      "reasoning_leak_markers": [
+        "<|channel>",
+        "<channel|>"
+      ]
+    },
+    {
+      "id": "gemma4_12b_qat_ollama",
+      "internal_automation_role": "user",
+      "status": "challenger",
+      "release_eligible": false,
+      "profile_digest_sha256": "64987838e53553f5cd3a4bef22da7944c98ed9c7b72ee937b8c59387dbc980b1",
+      "model": {
+        "id": "harness-gemma4-12b-qat:latest",
+        "base_model": "gemma4:12b-it-qat",
+        "family": "gemma4-12b",
+        "variant": "official-qat",
+        "architecture": "gemma4",
+        "parameter_size": "11.9B",
+        "quantization": "Q4_0"
+      },
+      "runtime": {
+        "backend": "ollama",
+        "version": "0.32.5",
+        "renderer": "gemma4",
+        "tool_parser": "gemma4",
+        "reasoning_parser": "gemma4"
+      },
+      "embedding": {
+        "id": "harness-bge-m3:latest",
+        "digest_sha256": "f17fbbb34ef71b82465519d25b0233ad64926968e18fd5eea0e7f111a2b65a93",
+        "family": "bert",
+        "parameter_size": "566.70M",
+        "quantization": "F16",
+        "dimensions": 1024,
+        "max_input_tokens": 8192,
+        "endpoint": "/api/embed",
+        "multilingual": true,
+        "observed_on": "2026-09-28"
+      },
+      "installation": {
+        "observed_on": "2026-09-29",
+        "installed_tag": "harness-gemma4-12b-qat:latest",
+        "installed_profile_digest_sha256": "64987838e53553f5cd3a4bef22da7944c98ed9c7b72ee937b8c59387dbc980b1",
+        "repository_modelfile": "modelfiles/gemma4_12b_qat_ollama.Modelfile",
+        "repository_modelfile_sha256": "c3574f751c2f313eeb088c930d26865c110f814a03e85bf18ee792a4d60a5e38",
+        "matches_repository_modelfile": true,
+        "parameters": {
+          "num_ctx": "65536",
+          "temperature": "0.3",
+          "presence_penalty": "0",
+          "top_k": "20",
+          "top_p": "0.8"
+        },
+        "tokenizer_url": "https://huggingface.co/google/gemma-4-12B-it/resolve/main/tokenizer.json"
+      },
+      "components": [
+        {
+          "id": "model_weights",
+          "evidence": {
+            "kind": "embedded_in_profile",
+            "subject": "model_weights",
+            "profile_digest_sha256": "64987838e53553f5cd3a4bef22da7944c98ed9c7b72ee937b8c59387dbc980b1",
+            "observed_via": "ollama_tags"
+          }
+        },
+        {
+          "id": "modelfile",
+          "evidence": {
+            "kind": "digest_sha256",
+            "subject": "gemma4_12b_qat_ollama.Modelfile",
+            "sha256": "c3574f751c2f313eeb088c930d26865c110f814a03e85bf18ee792a4d60a5e38"
+          }
+        },
+        {
+          "id": "tokenizer",
+          "evidence": {
+            "kind": "embedded_in_profile",
+            "subject": "tokenizer",
+            "profile_digest_sha256": "64987838e53553f5cd3a4bef22da7944c98ed9c7b72ee937b8c59387dbc980b1",
+            "observed_via": "ollama_show"
+          }
+        },
+        {
+          "id": "token_estimator_tokenizer_file",
+          "evidence": {
+            "kind": "digest_sha256",
+            "subject": ".harness/tokenizers/gemma4_12b_qat_ollama.json read by HuggingFaceTokenEstimator",
+            "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+            "provenance": "Host-local, não versionado; baixado de https://huggingface.co/google/gemma-4-12B-it/resolve/main/tokenizer.json em 2026-09-29; idêntico byte a byte ao do E4B (mesmo SHA-256)."
+          }
+        },
+        {
+          "id": "embedding_model",
+          "evidence": {
+            "kind": "digest_sha256",
+            "subject": "harness-bge-m3:latest served by the same Ollama installation",
+            "sha256": "f17fbbb34ef71b82465519d25b0233ad64926968e18fd5eea0e7f111a2b65a93",
+            "provenance": "Modelo separado do chat, criado de modelfiles/bge_m3_embedding.Modelfile sobre `bge-m3:latest` (digest 7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab). Digest lido em /api/tags em 2026-09-28; vetores idênticos aos da base (diferença máxima 0.0 em /api/embed), 1024 dimensões.",
+            "verify": "curl -s http://127.0.0.1:11434/api/tags | grep harness-bge-m3"
+          }
+        },
+        {
+          "id": "chat_template",
+          "evidence": {
+            "kind": "embedded_in_profile",
+            "subject": "chat_template",
+            "profile_digest_sha256": "64987838e53553f5cd3a4bef22da7944c98ed9c7b72ee937b8c59387dbc980b1",
+            "observed_via": "ollama_show"
+          }
+        }
+      ],
+      "hardware_evidence": {
+        "gpu": "AMD Radeon RX 7600",
+        "vram_gib": 7.98,
+        "source": "Bake-off 2026-09-29 (replay de 8 Turns reais do Operator × 3 + model_smoke): 7094 MiB de VRAM, 14 tok/s de geração, 67 s por resposta (mediana), 24/24 acertos conferidos à mão, model_smoke 99/105."
+      },
+      "capabilities": {
+        "structured_tool_calls": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "Challenger ainda não medido no digest exato; a medição do Q4_0 QAT não se transfere"
+          },
+          "gate_status": "pending"
+        },
+        "reasoning": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "Challenger ainda não medido no digest exato; a medição do Q4_0 QAT não se transfere"
+          },
+          "gate_status": "pending"
+        },
+        "vision": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "sem medição no digest exato"
+          },
+          "gate_status": "pending"
+        },
+        "embeddings": {
+          "support": "supported",
+          "evidence": {
+            "kind": "local_measurement",
+            "source": "POST /api/embed em bge-m3:latest devolveu 1024 dimensões (2026-08-12)"
+          },
+          "gate_status": "pending"
+        },
+        "usage_tokens": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "Challenger ainda não medido no digest exato; a sonda de 2026-09-22 foi no Q4_0 QAT"
+          },
+          "gate_status": "pending"
+        },
+        "streaming": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "docs/RELEASE-PENDING.md"
+          },
+          "gate_status": "pending"
+        },
+        "parallel_tool_calls": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "docs/RELEASE-PENDING.md"
+          },
+          "gate_status": "pending"
+        }
+      },
+      "tool_markup_leak_markers": [
+        "<|tool_call>",
+        "<tool_call|>",
+        "<|tool_response>",
+        "<tool_response|>"
+      ],
+      "reasoning_leak_markers": [
+        "<|channel>",
+        "<channel|>"
+      ]
+    },
+    {
+      "id": "gemma4_26b_a4b_qat_llamacpp",
+      "internal_automation_role": "user",
+      "status": "challenger",
+      "release_eligible": false,
+      "profile_digest_sha256": "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d",
+      "model": {
+        "id": "gemma4-26b-a4b-qat",
+        "base_model": "google/gemma-4-26B-A4B-it-qat-q4_0-gguf (gemma-4-26B_q4_0-it.gguf)",
+        "family": "gemma4-26b-a4b",
+        "variant": "official-qat",
+        "architecture": "gemma4",
+        "parameter_size": "26B (4B ativos por token, MoE)",
+        "quantization": "Q4_0"
+      },
+      "runtime": {
+        "backend": "llama_cpp",
+        "version": "b11114",
+        "renderer": "gguf_jinja_template",
+        "tool_parser": "llama_server_chat_parser",
+        "reasoning_parser": "deepseek"
+      },
+      "embedding": {
+        "id": "harness-bge-m3:latest",
+        "digest_sha256": "f17fbbb34ef71b82465519d25b0233ad64926968e18fd5eea0e7f111a2b65a93",
+        "family": "bert",
+        "parameter_size": "566.70M",
+        "quantization": "F16",
+        "dimensions": 1024,
+        "max_input_tokens": 8192,
+        "endpoint": "/api/embed",
+        "multilingual": true,
+        "observed_on": "2026-09-28"
+      },
+      "installation": {
+        "observed_on": "2026-09-29",
+        "installed_profile_digest_sha256": "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d",
+        "gguf_file": "gemma-4-26B-A4B-it-qat-q4_0.gguf",
+        "gguf_sha256": "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d",
+        "llama_cpp_build": "b11114 (0.4.1-dev, commit 991991118), ubuntu-vulkan-x64 oficial",
+        "server_args": [
+          "-c",
+          "65536",
+          "-np",
+          "1",
+          "-ctk",
+          "q8_0",
+          "-ctv",
+          "q8_0",
+          "-ngl",
+          "99",
+          "--n-cpu-moe",
+          "24",
+          "-fa",
+          "on",
+          "--jinja",
+          "--reasoning-format",
+          "deepseek",
+          "--temp",
+          "0.3",
+          "--top-k",
+          "20",
+          "--top-p",
+          "0.8"
+        ],
+        "parameters": {
+          "num_ctx": "65536",
+          "temperature": "0.3",
+          "presence_penalty": "0",
+          "top_k": "20",
+          "top_p": "0.8"
+        },
+        "moe_placement": "--n-cpu-moe 24: os especialistas de 24 das 30 camadas ficam na RAM; atenção, embeddings, KV cache e os especialistas de 6 camadas na GPU. Medido em 2026-09-29 (janela de 65536, KV q8_0): 30 na RAM = 3676 MiB de VRAM, 22,7 tok/s de geração, 338 tok/s de prefill em 5212 tokens; 24 = 6207 MiB, 25,5 e 414; 20 = 7752 MiB, 27,1 e 501. Cada camada na GPU custa ~0,42 GB; 24 deixa ~1,8 GB para visão e embedding, 20 encosta no teto da placa.",
+        "tokenizer_url": "https://huggingface.co/google/gemma-4-26B-A4B-it/resolve/main/tokenizer.json"
+      },
+      "components": [
+        {
+          "id": "model_weights",
+          "evidence": {
+            "kind": "digest_sha256",
+            "subject": "gemma-4-26B-A4B-it-qat-q4_0.gguf",
+            "sha256": "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d",
+            "provenance": "Baixado de https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf em 2026-09-29; SHA-256 igual ao LFS oid publicado."
+          }
+        },
+        {
+          "id": "tokenizer",
+          "evidence": {
+            "kind": "embedded_in_profile",
+            "subject": "tokenizer",
+            "profile_digest_sha256": "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d",
+            "observed_via": "gguf_metadata"
+          }
+        },
+        {
+          "id": "token_estimator_tokenizer_file",
+          "evidence": {
+            "kind": "digest_sha256",
+            "subject": ".harness/tokenizers/gemma4_26b_a4b_qat_llamacpp.json read by HuggingFaceTokenEstimator",
+            "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+            "provenance": "Host-local, não versionado; o tokenizer.json de google/gemma-4-26B-A4B-it é idêntico byte a byte ao do E4B (mesmo SHA-256, conferido em 2026-09-29)."
+          }
+        },
+        {
+          "id": "embedding_model",
+          "evidence": {
+            "kind": "digest_sha256",
+            "subject": "harness-bge-m3:latest served by the same Ollama installation",
+            "sha256": "f17fbbb34ef71b82465519d25b0233ad64926968e18fd5eea0e7f111a2b65a93",
+            "provenance": "Modelo separado do chat, criado de modelfiles/bge_m3_embedding.Modelfile sobre `bge-m3:latest` (digest 7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab). Digest lido em /api/tags em 2026-09-28; vetores idênticos aos da base (diferença máxima 0.0 em /api/embed), 1024 dimensões.",
+            "verify": "curl -s http://127.0.0.1:11434/api/tags | grep harness-bge-m3"
+          }
+        },
+        {
+          "id": "chat_template",
+          "evidence": {
+            "kind": "embedded_in_profile",
+            "subject": "chat_template",
+            "profile_digest_sha256": "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d",
+            "observed_via": "gguf_metadata"
+          }
+        }
+      ],
+      "hardware_evidence": {
+        "gpu": "AMD Radeon RX 7600",
+        "vram_gib": 7.98,
+        "source": "Bake-off 2026-09-29 (replay de 8 Turns reais do Operator × 3 + model_smoke): 6304 MiB de VRAM com --n-cpu-moe 24, 23 tok/s de geração, 70 s por resposta (mediana, ~1160 tokens com thinking), 24/24 acertos conferidos à mão, model_smoke 103/105. Com thinking desligado: 36 s, ~340 tokens, 23/24 (um Turn terminou em malformed_model_response_limit)."
+      },
+      "capabilities": {
+        "structured_tool_calls": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "Challenger ainda não medido no digest exato; a medição do Q4_0 QAT não se transfere"
+          },
+          "gate_status": "pending"
+        },
+        "reasoning": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "Challenger ainda não medido no digest exato; a medição do Q4_0 QAT não se transfere"
+          },
+          "gate_status": "pending"
+        },
+        "vision": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "sem medição no digest exato"
+          },
+          "gate_status": "pending"
+        },
+        "embeddings": {
+          "support": "supported",
+          "evidence": {
+            "kind": "local_measurement",
+            "source": "POST /api/embed em bge-m3:latest devolveu 1024 dimensões (2026-08-12)"
+          },
+          "gate_status": "pending"
+        },
+        "usage_tokens": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "Challenger ainda não medido no digest exato; a sonda de 2026-09-22 foi no Q4_0 QAT"
+          },
+          "gate_status": "pending"
+        },
+        "streaming": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "docs/RELEASE-PENDING.md"
+          },
+          "gate_status": "pending"
+        },
+        "parallel_tool_calls": {
+          "support": "unknown",
+          "evidence": {
+            "kind": "no_evidence",
+            "source": "docs/RELEASE-PENDING.md"
+          },
+          "gate_status": "pending"
+        }
+      },
+      "tool_markup_leak_markers": [
+        "<|tool_call>",
+        "<tool_call|>",
+        "<|tool_response>",
+        "<tool_response|>"
+      ],
+      "reasoning_leak_markers": [
+        "<|channel>",
+        "<channel|>"
+      ]
+    },
+    {
       "id": "agents_a1_4b_llamacpp",
       "status": "retired",
       "retired_note": "Superado pelo gemma4_e4b_qat_ollama (perfil core desde 23/09/2026); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro das medições.",
