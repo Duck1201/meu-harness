@@ -13,7 +13,7 @@ Passing cases are recorded too. On the same fixture, a passing trace and a
 failing one differ only in what the model chose, which is the pair a preference
 dataset needs; keeping only failures throws away the positive half.
 
-    uv run python scripts/collect-model-traces.py --output datasets/model-failures/traces.jsonl
+    uv run python scripts/collect-model-traces.py --output datasets/model-traces/traces.jsonl
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from harness import (  # noqa: E402
-    EngineReadiness,
     EvalTier,
     HuggingFaceTokenEstimator,
     ModelMessage,
@@ -43,18 +42,19 @@ from harness import (  # noqa: E402
 )
 from harness.brave_browser import BraveEgressGuard  # noqa: E402
 from harness.evals import (  # noqa: E402
-    BENCH_DATE,
-    ModelCaseRunner,
     RegressionFixture,
+    build_live_model_runner,
     load_eval_catalog,
 )
 from harness.evals.runner import EvalCaseSpec  # noqa: E402
-from harness.system_prompt import build_system_prompt, load_operator_notes  # noqa: E402
+from harness.evals.traces import ModelExchange, RecordingModelRuntime  # noqa: E402
+from harness.system_prompt import load_operator_notes  # noqa: E402
 
 # The protocol's recorded orders. A seed is what varies a local run, so more
 # repetitions of the same seed add copies, not evidence.
 PROTOCOL_SEEDS = (104729, 130363, 155921)
 EXCERPT_LIMIT = 2000
+OLLAMA_URL = "http://127.0.0.1:11434"
 
 
 def _excerpt(value: object) -> Any:
@@ -90,35 +90,38 @@ def _refusals(results: Sequence[ToolResult]) -> list[Mapping[str, Any]]:
     ]
 
 
-def _offered_tools(config: Any) -> list[str]:
-    # The eval policy holds every grant, so the model is offered every enabled tool.
-    return sorted(
-        definition.name
-        for definition in config.tool_registry.model_tools
-        if definition.status == "enabled"
-    )
-
-
 def _record(
     fixture: RegressionFixture,
     seed: int,
     result: Any,
-    offered: Sequence[str],
-    system_prompt: str,
+    exchanges: Sequence[ModelExchange],
+    provenance: Mapping[str, str],
 ) -> Mapping[str, Any]:
     evaluation = result.evaluation
     assertions = evaluation.assertions if evaluation is not None else ()
     oracle = fixture.oracle
+    # O system prompt e as tools são os do primeiro passo, como o modelo os
+    # recebeu: variam por fixture (visão, Corpus) e não se reconstroem de fora.
+    first = exchanges[0].request if exchanges else None
+    system = (
+        next(
+            (message.content for message in first.messages if message.role is ModelRole.SYSTEM),
+            None,
+        )
+        if first is not None
+        else None
+    )
     return {
+        **provenance,
         "fixture_id": fixture.id,
         "fixture_type": fixture.type,
         "tags": list(fixture.tags),
         "seed": seed,
         "verdict": evaluation.verdict.value if evaluation is not None else "not_evaluated",
         "prompt": {
-            "system": system_prompt,
+            "system": system,
             "user": fixture.stimulus.get("user_request"),
-            "offered_tools": list(offered),
+            "offered_tools": [tool.name for tool in first.tools] if first is not None else [],
             "workspace": _excerpt(fixture.stimulus.get("workspace")),
         },
         "observed": {
@@ -150,6 +153,7 @@ def _record(
             for item in assertions
             if item.verdict.value != "pass"
         ],
+        "model_exchanges": [exchange.to_record() for exchange in exchanges],
         "metrics": dict(result.metrics),
         "security_violations": result.security_violations,
     }
@@ -183,7 +187,7 @@ async def collect(seeds: Sequence[int], output: Path, tokenizer: Path) -> int:
         contract_root=ROOT,
     )
     runtime = OllamaRuntime(
-        base_url="http://127.0.0.1:11434",
+        base_url=OLLAMA_URL,
         model=config.runtime_profile.model.id,
         expected_digest=config.runtime_profile.profile_digest_sha256,
         timeout=config.loop.model_generation_timeout_seconds,
@@ -194,23 +198,27 @@ async def collect(seeds: Sequence[int], output: Path, tokenizer: Path) -> int:
         return 2
 
     await _warm_up(runtime)
-    operator_notes = load_operator_notes(ROOT / "SYSTEM-PROMPT.md")
-    runner = ModelCaseRunner(
-        config=config,
-        runtime=runtime,
+    recorder = RecordingModelRuntime(runtime)
+    live = build_live_model_runner(
+        config,
+        runtime=recorder,
         estimator=HuggingFaceTokenEstimator(
             tokenizer,
             expected_sha256=hashlib.sha256(tokenizer.read_bytes()).hexdigest(),
         ),
-        operator_notes=operator_notes,
-        runtime_readiness=EngineReadiness(ready=True),
+        operator_notes=load_operator_notes(ROOT / "SYSTEM-PROMPT.md"),
+        ollama_url=OLLAMA_URL,
+        embedding=config.runtime_profile.embedding,
         browser_guard=BraveEgressGuard(),
     )
+    runner = live.runner
     fixtures = [item for item in catalog.dataset.fixtures if runner.supports(item.type)]
-    offered = _offered_tools(config)
-    system_prompt = build_system_prompt(
-        config, today=BENCH_DATE, operator_notes=operator_notes, vision_tool_offered=False
-    )
+    provenance = {
+        "runtime_profile": config.runtime_profile.id,
+        "model": config.runtime_profile.model.id,
+        "profile_digest_sha256": config.runtime_profile.profile_digest_sha256,
+        "operator_prompt_digest": runner.operator_prompt_digest,
+    }
     output.parent.mkdir(parents=True, exist_ok=True)
     counts: dict[str, int] = {}
     try:
@@ -227,13 +235,14 @@ async def collect(seeds: Sequence[int], output: Path, tokenizer: Path) -> int:
                             tier=EvalTier.MODEL_SMOKE,
                         )
                     )
-                    record = _record(fixture, seed, result, offered, system_prompt)
+                    record = _record(fixture, seed, result, recorder.take(), provenance)
                     handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
                     handle.flush()
                     verdict = str(record["verdict"])
                     counts[verdict] = counts.get(verdict, 0) + 1
                     print(f"{seed} {fixture.id}: {verdict}", file=sys.stderr)
     finally:
+        await live.aclose()
         await runtime.aclose()
     print(json.dumps({"output": str(output), "records": sum(counts.values()), "verdicts": counts}))
     return 0
@@ -244,7 +253,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "datasets/model-failures/traces.jsonl",
+        default=ROOT / "datasets/model-traces/traces.jsonl",
     )
     parser.add_argument(
         "--seed",

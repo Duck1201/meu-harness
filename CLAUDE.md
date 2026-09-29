@@ -95,7 +95,10 @@ exige alterar o documento, os contratos e as fixtures no mesmo commit.
 - **O runner ao vivo se compõe num lugar só**: `build_live_runner`
   (`src/harness/evals/model_runner.py`), chamado pelo script de experimento e
   pelo teste que prova que todo tipo de fixture tem runner. Duplicar essa
-  composição já deixou o script quebrado por meses sem ninguém notar.
+  composição já deixou o script quebrado por meses sem ninguém notar. O
+  `ModelCaseRunner` com embedding, visão e juiz reais também tem um lugar só,
+  `build_live_model_runner`, usado pelo script de experimento e pelo coletor de
+  traces (`scripts/collect-model-traces.py`, que alimenta `datasets/model-traces/`).
 
 ## Arquitetura
 

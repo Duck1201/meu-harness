@@ -16,8 +16,10 @@ from .model_runner import (
     BENCH_DATE,
     BrowserBenchCaseRunner,
     CompositeCaseRunner,
+    LiveModelRunner,
     ModelCaseRunner,
     RuntimeSwitch,
+    build_live_model_runner,
     build_live_runner,
 )
 from .models import (
@@ -114,6 +116,7 @@ __all__ = [
     "FileContentEquals",
     "FileExists",
     "LanguageDetector",
+    "LiveModelRunner",
     "MaxToolCalls",
     "ModelCaseRunner",
     "OracleDefinition",
@@ -135,6 +138,7 @@ __all__ = [
     "ToolCalled",
     "ToolNotCalled",
     "TypedAssertion",
+    "build_live_model_runner",
     "build_live_runner",
     "canonical_digest",
     "evaluate_oracle",

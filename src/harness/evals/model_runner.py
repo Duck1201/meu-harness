@@ -14,6 +14,7 @@ import re
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Protocol, cast
@@ -22,9 +23,15 @@ from urllib.parse import urlsplit
 from ..agent_engine import AgentEngine, ResponseMarkup
 from ..brave_browser import BraveBrowserCapability, BraveEgressGuard
 from ..composite_tools import CompositeToolExecutor
-from ..config import HarnessConfig, RuntimeProfileConfig, ToolRegistryConfig
+from ..config import (
+    EmbeddingIdentityConfig,
+    HarnessConfig,
+    RuntimeProfileConfig,
+    ToolRegistryConfig,
+)
 from ..context_builder import ContextBuilder, ModelViewFormat
 from ..conversation_store import ConversationStore
+from ..corpus_judge import OllamaRerankerAnswerJudge
 from ..corpus_service import CorpusRetriever
 from ..corpus_tools import CorpusToolExecutor
 from ..domain import (
@@ -41,6 +48,7 @@ from ..domain import (
     waived_reason_code,
 )
 from ..local_tools import RegistryToolExecutor
+from ..ollama_runtime import OllamaEmbeddingRuntime
 from ..ports import (
     ConfirmationDecision,
     ConfirmationRequest,
@@ -56,6 +64,7 @@ from ..ports import (
     VisionRuntime,
 )
 from ..system_prompt import build_system_prompt
+from ..vision_runtime import OllamaVisionRuntime
 from ..vision_tools import VisionToolExecutor
 from ..web_tools import WebToolExecutor
 from .bench import BENCH_HOSTNAME, SEARCH_PATH, BenchEgressGuard, BenchServer
@@ -748,6 +757,80 @@ def build_live_runner(
             model_runner,
         )
     )
+
+
+@dataclass(slots=True)
+class LiveModelRunner:
+    """O ModelCaseRunner da bancada com os modelos auxiliares que ele abriu."""
+
+    runner: ModelCaseRunner
+    embedder: OllamaEmbeddingRuntime | None
+    vision: OllamaVisionRuntime
+    judge: OllamaRerankerAnswerJudge
+
+    async def aclose(self) -> None:
+        if self.embedder is not None:
+            await self.embedder.aclose()
+        await self.vision.aclose()
+        await self.judge.aclose()
+
+
+def build_live_model_runner(
+    config: HarnessConfig,
+    *,
+    runtime: ModelRuntime,
+    estimator: TokenEstimator,
+    operator_notes: str,
+    ollama_url: str,
+    embedding: EmbeddingIdentityConfig | None,
+    browser_guard: BraveEgressGuard | None = None,
+    runtime_switch: RuntimeSwitch | None = None,
+) -> LiveModelRunner:
+    """O runner de modelo com embedding, visão e juiz reais, montado num lugar só.
+
+    O coletor de traces montava o seu à mão, sem visão nem juiz, e parou na
+    primeira fixture que pede `describe_image` sem que nada acusasse: é o mesmo
+    desvio que `build_live_runner` fechou para a composição dos runners.
+
+    O `embedding` vem de fora porque, num bake-off, é o da rota e não o do braço:
+    o modelo de chat é comparado diante das mesmas passagens. Visão e juiz são
+    sempre montados; quem decide se o braço os usa é o próprio braço.
+    """
+    embedder = (
+        OllamaEmbeddingRuntime(
+            base_url=ollama_url,
+            model=embedding.id,
+            expected_digest=embedding.digest_sha256,
+            dimensions=embedding.dimensions,
+        )
+        if embedding is not None
+        else None
+    )
+    vision = OllamaVisionRuntime(
+        base_url=ollama_url,
+        model=config.vision.ollama_tag,
+        expected_digest=config.vision.ollama_digest,
+        max_output_tokens=config.vision.max_output_tokens,
+        context_tokens=config.vision.context_tokens,
+    )
+    judge = OllamaRerankerAnswerJudge(
+        base_url=ollama_url,
+        model=config.corpus.answer_judge.ollama_tag,
+        expected_digest=config.corpus.answer_judge.ollama_digest,
+    )
+    runner = ModelCaseRunner(
+        config=config,
+        runtime=runtime,
+        estimator=estimator,
+        operator_notes=operator_notes,
+        runtime_readiness=EngineReadiness(ready=True),
+        browser_guard=browser_guard,
+        embedder=embedder,
+        runtime_switch=runtime_switch,
+        answer_judge=judge,
+        vision_runtime=vision,
+    )
+    return LiveModelRunner(runner=runner, embedder=embedder, vision=vision, judge=judge)
 
 
 def _corpus_granted(spec: EvalCaseSpec) -> bool:
