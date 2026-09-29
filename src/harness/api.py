@@ -502,6 +502,11 @@ def create_app(
         )
         return {"conversation": _conversation_json(conversation)}
 
+    @app.delete("/api/conversations")
+    async def delete_all_conversations() -> dict[str, Any]:
+        """Apaga todas as Conversations; Corpora e arquivos do Workspace ficam."""
+        return {"deleted": await application_service.delete_all_conversations()}
+
     @app.delete("/api/conversations/{conversation_id}", status_code=204)
     async def delete_conversation(conversation_id: str) -> Response:
         await application_service.delete_conversation(conversation_id)

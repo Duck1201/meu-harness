@@ -42,6 +42,9 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ### Adicionado
 
+- **Limpar todas as conversas**, na barra lateral, com confirmação. Apaga as
+  arquivadas também e cancela o Turn que estiver rodando antes; acervos de RAG e
+  arquivos do Workspace ficam (`DELETE /api/conversations`).
 - **Anexar imagem no chat.** Botão ou Ctrl+V no campo de mensagem grava a imagem
   em `anexos/` no Workspace e manda o caminho para o modelo chamar o
   `describe_image`. Só PNG, JPEG e WebP, conferidos pelos bytes.

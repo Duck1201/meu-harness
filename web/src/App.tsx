@@ -656,6 +656,22 @@ function ChatArea({
     });
   };
 
+  const clearAllConversations = () => {
+    const confirmed = window.confirm(
+      "Apagar TODAS as conversas, inclusive as arquivadas? Isso não pode ser desfeito. " +
+        "Os acervos de RAG e os arquivos do Workspace continuam.",
+    );
+    if (!confirmed) return;
+    for (const controller of controllers.current) controller.abort();
+    controllers.current.clear();
+    setLiveRuns({});
+    void runAction("clear-all", async () => {
+      await client.deleteAllConversations();
+      selectedId.current = null;
+      await replaceSnapshot(() => client.getChatSnapshot(null));
+    });
+  };
+
   const toggleGrant = (permission: "WriteGrant" | "WebAccessGrant") => {
     if (!snapshot.conversationId) return;
     const current = snapshot.grants.find((grant) => grant.permission === permission);
@@ -839,10 +855,11 @@ function ChatArea({
         open={sidebarOpen}
         creating={creatingConversation}
         onToggleCreating={setCreatingConversation}
-        busy={busyAction === "create" || busyAction === "select"}
+        busy={busyAction === "create" || busyAction === "select" || busyAction === "clear-all"}
         onClose={() => setSidebarOpen(false)}
         onSelect={selectConversation}
         onCreate={createConversation}
+        onClearAll={clearAllConversations}
       />
 
       <section className="chat-stage" aria-labelledby="conversation-title">
@@ -1035,6 +1052,7 @@ function ConversationSidebar({
   onClose,
   onSelect,
   onCreate,
+  onClearAll,
 }: {
   groups: WorkspaceGroup[];
   selectedId: string | null;
@@ -1045,6 +1063,7 @@ function ConversationSidebar({
   onClose: () => void;
   onSelect: (id: string) => void;
   onCreate: (root: string, name: string) => Promise<boolean>;
+  onClearAll: () => void;
 }) {
   const [root, setRoot] = useState(groups[0]?.root ?? "");
   const [name, setName] = useState("Nova conversa");
@@ -1157,6 +1176,14 @@ function ConversationSidebar({
           );
         })}
       </div>
+      <button
+        className="clear-conversations"
+        type="button"
+        onClick={onClearAll}
+        disabled={busy || !groups.some((group) => group.conversations.length > 0)}
+      >
+        <Trash2 size={13} /> Limpar todas as conversas
+      </button>
       <div className="sidebar-footer-note">
         <ShieldCheck size={14} />
         WorkspaceRootGrant define o limite local

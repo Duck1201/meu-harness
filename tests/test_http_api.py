@@ -614,3 +614,53 @@ def test_an_image_over_the_vision_limit_is_refused_before_it_is_written(tmp_path
 
     assert too_large.status_code == 413
     assert not (workspace / "anexos").exists()
+
+
+def test_clearing_every_conversation_stops_the_running_turn_first(tmp_path: Path) -> None:
+    import asyncio
+
+    class ParkedRuntime(FakeRuntime):
+        def __init__(self) -> None:
+            self.entered = Event()
+            self.calls = 0
+
+        async def generate(self, request: ModelRequest) -> ModelResponse:
+            del request
+            self.calls += 1
+            self.entered.set()
+            # Espera cancelável, como um request HTTP ao Ollama no meio do Turn.
+            await asyncio.sleep(3600)
+            return ModelResponse(content="never")
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    runtime = ParkedRuntime()
+    app = create_app(
+        service=_service(tmp_path, workspace, runtime=runtime),
+        static_dir=tmp_path / "missing-dist",
+    )
+
+    with TestClient(app, client=LOOPBACK) as client:
+        running = client.post("/api/conversations", json={"workspace_root": str(workspace)}).json()[
+            "conversation"
+        ]["id"]
+        archived = client.post(
+            "/api/conversations", json={"workspace_root": str(workspace)}
+        ).json()["conversation"]["id"]
+        archive = client.patch(f"/api/conversations/{archived}", json={"archived": True})
+        assert archive.json()["conversation"]["archived_at"] is not None
+        client.post(f"/api/conversations/{running}/requests", json={"content": "first"})
+        assert runtime.entered.wait(timeout=2)
+        # Uma segunda na fila: o worker cancelado não pode se recriar para ela.
+        client.post(f"/api/conversations/{running}/requests", json={"content": "second"})
+
+        cleared = client.delete("/api/conversations")
+        sleep(0.2)
+        remaining = client.get("/api/conversations", params={"include_archived": True})
+        fresh = client.post("/api/conversations", json={"workspace_root": str(workspace)})
+
+    assert cleared.status_code == 200
+    assert cleared.json() == {"deleted": 2}
+    assert remaining.json()["conversations"] == []
+    assert runtime.calls == 1
+    assert fresh.status_code == 201

@@ -440,6 +440,30 @@ a:focus-visible {
   background: var(--purple);
 }
 
+.clear-conversations {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 14px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.clear-conversations:hover:not(:disabled) {
+  border-color: #d9534f;
+  color: #b3261e;
+}
+
+.clear-conversations:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .sidebar-footer-note {
   display: flex;
   align-items: center;

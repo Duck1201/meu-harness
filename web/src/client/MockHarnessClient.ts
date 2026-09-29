@@ -304,6 +304,12 @@ export class MockHarnessClient implements HarnessClient {
     return clone(conversation);
   }
 
+  async deleteAllConversations() {
+    const deleted = this.conversations.length;
+    this.conversations = [];
+    return deleted;
+  }
+
   async deleteConversation(conversationId: string) {
     this.requireConversation(conversationId);
     this.conversations = this.conversations.filter((item) => item.id !== conversationId);

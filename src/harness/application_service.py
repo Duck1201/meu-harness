@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import re
 import tempfile
@@ -13,7 +14,7 @@ from .brave_browser import BraveBrowserCapability, BraveEgressGuard
 from .composite_tools import CompositeToolExecutor
 from .config import CorpusScraperConfig, HarnessConfig, ToolRegistryConfig, VisionConfig
 from .context_builder import ContextBuilder
-from .conversation_store import ConversationStore
+from .conversation_store import ConversationStore, NotFoundError
 from .corpus_browser import ScraplingBrowserRenderer
 from .corpus_scraper import PageRenderer, Scraper
 from .corpus_service import (
@@ -208,6 +209,9 @@ class ApplicationService:
         self._workers: dict[str, asyncio.Task[None]] = {}
         self._stop_signals: dict[str, _CooperativeStopSignal] = {}
         self._worker_lock = asyncio.Lock()
+        # Conversas sendo apagadas: o worker cancelado não pode se recriar para a
+        # fila de uma conversa que está deixando de existir.
+        self._retiring: set[str] = set()
         self._workspace_coordinator = WorkspaceCoordinator(
             store, config.tool_registry.effects_by_tool
         )
@@ -439,7 +443,45 @@ class ApplicationService:
         return await self.store.yolo_enabled()
 
     async def delete_conversation(self, conversation_id: str) -> None:
-        await self.store.delete_conversation(conversation_id)
+        await self.store.get_conversation(conversation_id)
+        await self._retire((conversation_id,))
+
+    async def delete_all_conversations(self) -> int:
+        """Apaga todas as Conversations, arquivadas inclusive, e diz quantas eram.
+
+        Os acervos de Corpus e os arquivos do Workspace ficam: são do Operator, não
+        da conversa. Turn em andamento é cancelado antes, como no shutdown.
+        """
+        conversations = await self.store.list_conversations(include_archived=True)
+        await self._retire(tuple(conversation.id for conversation in conversations))
+        return len(conversations)
+
+    async def _retire(self, conversation_ids: tuple[str, ...]) -> None:
+        """Cancela o worker de cada conversa e só então a apaga do store.
+
+        Apagar com o worker vivo deixava o Turn escrevendo numa conversa que não
+        existe mais, e o worker se recriava para a fila que a cascata já tinha
+        levado junto.
+        """
+        self._retiring.update(conversation_ids)
+        try:
+            async with self._worker_lock:
+                tasks = [
+                    task
+                    for conversation_id in conversation_ids
+                    if (task := self._workers.get(conversation_id)) is not None
+                ]
+            for task in tasks:
+                task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            # Um worker parado numa confirmação sai pelo finally do gate, que
+            # descarta a pendência: não sobra pergunta para uma conversa apagada.
+            for conversation_id in conversation_ids:
+                with contextlib.suppress(NotFoundError):
+                    await self.store.delete_conversation(conversation_id)
+        finally:
+            self._retiring.difference_update(conversation_ids)
 
     async def enqueue_request(self, conversation_id: str, content: str) -> PendingRequest:
         conversation = await self.store.get_conversation(conversation_id)
@@ -770,8 +812,10 @@ class ApplicationService:
                 current = asyncio.current_task()
                 if self._workers.get(conversation_id) is current:
                     self._workers.pop(conversation_id, None)
-                    if not self._shutting_down and await self.store.list_pending_requests(
-                        conversation_id
+                    if (
+                        not self._shutting_down
+                        and conversation_id not in self._retiring
+                        and await self.store.list_pending_requests(conversation_id)
                     ):
                         self._workers[conversation_id] = asyncio.create_task(
                             self._run_conversation(conversation_id),

@@ -37,6 +37,8 @@ export interface HarnessClient {
   renameConversation(conversationId: string, name: string): Promise<Conversation>;
   archiveConversation(conversationId: string, archived?: boolean): Promise<Conversation>;
   deleteConversation(conversationId: string): Promise<void>;
+  /** Apaga todas as conversas, arquivadas inclusive, e devolve quantas eram. */
+  deleteAllConversations(): Promise<number>;
 
   getChatSnapshot(conversationId?: string | null): Promise<ChatSnapshot>;
   enqueueRequest(conversationId: string, content: string): Promise<ApiPendingRequest>;

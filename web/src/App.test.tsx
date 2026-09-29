@@ -430,6 +430,27 @@ describe("App", () => {
     });
   });
 
+  it("limpa todas as conversas só depois de o Operator confirmar", async () => {
+    const user = userEvent.setup();
+    const client = new MockHarnessClient();
+    const clear = vi.spyOn(client, "deleteAllConversations");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+    render(<App client={client} />);
+
+    await screen.findByRole("heading", { name: "Refinar retenção por conversa" });
+    await user.click(screen.getByRole("button", { name: /Limpar todas as conversas/ }));
+    expect(clear).not.toHaveBeenCalled();
+
+    confirm.mockReturnValueOnce(true);
+    await user.click(screen.getByRole("button", { name: /Limpar todas as conversas/ }));
+
+    await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("heading", { name: "Crie a primeira conversa" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Verificação de página/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Limpar todas as conversas/ })).toBeDisabled();
+    confirm.mockRestore();
+  });
+
   it("mostra o consumo da janela de contexto enquanto o turno roda", async () => {
     const user = userEvent.setup();
     const client = new MockHarnessClient();

@@ -121,6 +121,13 @@ export class FetchHarnessClient implements HarnessClient {
     return this.updateConversation(conversationId, { archived });
   }
 
+  async deleteAllConversations() {
+    const payload = await this.request<{ deleted: number }>("/conversations", {
+      method: "DELETE",
+    });
+    return payload.deleted;
+  }
+
   async deleteConversation(conversationId: string) {
     await this.request<void>(`/conversations/${encodeURIComponent(conversationId)}`, {
       method: "DELETE",
