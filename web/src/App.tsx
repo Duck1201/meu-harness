@@ -11,6 +11,7 @@ import {
   FlaskConical,
   Globe2,
   HardDrive,
+  ImagePlus,
   Library,
   Menu,
   MessageSquare,
@@ -35,6 +36,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -955,6 +957,11 @@ function ChatArea({
               isStopping={busyAction === "stop"}
               onStop={stop}
               onSend={send}
+              onAttach={
+                snapshot.conversationId
+                  ? (file) => client.attachImage(snapshot.conversationId as string, file)
+                  : undefined
+              }
             />
           </>
         )}
@@ -1439,19 +1446,37 @@ function Feedback({
   );
 }
 
+type Attachment = { path: string; name: string; preview: string };
+
+// Os formatos que o describe_image lê; o servidor confere os bytes de novo.
+const ATTACHABLE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const DEFAULT_IMAGE_QUESTION = "O que tem nesta imagem?";
+
+export function withAttachments(prompt: string, paths: string[]): string {
+  if (paths.length === 0) return prompt;
+  const lines = paths.map((path) => `Imagem anexada: ${path}`);
+  return `${prompt || DEFAULT_IMAGE_QUESTION}\n\n${lines.join("\n")}`;
+}
+
 function Composer({
   isRunning,
   isStopping,
   onStop,
   onSend,
+  onAttach,
 }: {
   isRunning: boolean;
   isStopping: boolean;
   onStop: () => void;
   onSend: (prompt: string) => void;
+  onAttach?: (file: File) => Promise<string>;
 }) {
   const [value, setValue] = useState("");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const insert = (text: string) => {
     const textarea = textareaRef.current;
@@ -1465,10 +1490,48 @@ function Composer({
     });
   };
 
+  const attach = (files: File[]) => {
+    if (!onAttach) return;
+    const images = files.filter((file) => ATTACHABLE_TYPES.includes(file.type));
+    if (images.length < files.length) {
+      setAttachError("Só PNG, JPEG e WebP podem ser anexados.");
+    } else {
+      setAttachError(null);
+    }
+    for (const file of images) {
+      setUploading((count) => count + 1);
+      onAttach(file)
+        .then((path) => {
+          const preview = URL.createObjectURL(file);
+          setAttachments((current) => [...current, { path, name: file.name, preview }]);
+        })
+        .catch((reason: unknown) => {
+          setAttachError(reason instanceof Error ? reason.message : "Falha ao anexar a imagem.");
+        })
+        .finally(() => setUploading((count) => count - 1));
+    }
+  };
+
+  const detach = (path: string) => {
+    setAttachments((current) => {
+      const removed = current.find((item) => item.path === path);
+      if (removed) URL.revokeObjectURL(removed.preview);
+      return current.filter((item) => item.path !== path);
+    });
+  };
+
+  const canSend = (value.trim().length > 0 || attachments.length > 0) && uploading === 0;
+
   const submit = () => {
-    const prompt = value.trim();
-    if (!prompt) return;
-    onSend(prompt);
+    if (!canSend) return;
+    onSend(
+      withAttachments(
+        value.trim(),
+        attachments.map((item) => item.path),
+      ),
+    );
+    for (const item of attachments) URL.revokeObjectURL(item.preview);
+    setAttachments([]);
     setValue("");
   };
 
@@ -1484,18 +1547,44 @@ function Composer({
     }
   };
 
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files);
+    if (files.length === 0 || !onAttach) return;
+    event.preventDefault();
+    attach(files);
+  };
+
   return (
     <div className="composer-dock">
       <form className="composer" onSubmit={onSubmit}>
         <label className="sr-only" htmlFor="prompt-composer">
           Solicitação para o Harness
         </label>
+        {(attachments.length > 0 || uploading > 0) && (
+          <ul className="composer-attachments" aria-label="Imagens anexadas">
+            {attachments.map((item) => (
+              <li key={item.path}>
+                <img src={item.preview} alt={item.name} />
+                <span title={item.path}>{item.name}</span>
+                <button
+                  type="button"
+                  aria-label={`Remover ${item.name}`}
+                  onClick={() => detach(item.path)}
+                >
+                  <X size={12} />
+                </button>
+              </li>
+            ))}
+            {uploading > 0 && <li className="uploading">Enviando…</li>}
+          </ul>
+        )}
         <textarea
           id="prompt-composer"
           ref={textareaRef}
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           rows={2}
           placeholder="Peça uma mudança ou faça uma pergunta…"
         />
@@ -1504,6 +1593,26 @@ function Composer({
             <button type="button" onClick={() => insert("```diff\n\n```")}>
               <FileCode2 size={15} /> diff
             </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={!onAttach}
+              title="Anexar imagem (também dá para colar com Ctrl+V)"
+            >
+              <ImagePlus size={15} /> imagem
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept={ATTACHABLE_TYPES.join(",")}
+              multiple
+              hidden
+              aria-label="Escolher imagem"
+              onChange={(event) => {
+                attach(Array.from(event.target.files ?? []));
+                event.target.value = "";
+              }}
+            />
           </div>
           <div className="composer-actions">
             <span>Enter envia · ⇧Enter quebra linha</span>
@@ -1518,7 +1627,7 @@ function Composer({
             <button
               className="send-button"
               type="submit"
-              disabled={!value.trim()}
+              disabled={!canSend}
               aria-label="Enviar solicitação"
             >
               <ArrowUp size={17} />
@@ -1526,6 +1635,11 @@ function Composer({
           </div>
         </div>
       </form>
+      {attachError && (
+        <span className="inline-error" role="alert">
+          {attachError}
+        </span>
+      )}
       <p>Solicitações concorrentes permanecem na fila desta conversa.</p>
     </div>
   );

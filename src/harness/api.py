@@ -266,6 +266,7 @@ def create_app(
         _BodyLimitMiddleware,
         max_body_bytes=max_body_bytes,
         upload_body_bytes=application_service.config.corpus.ingestion.max_upload_bytes,
+        attachment_body_bytes=application_service.config.vision.max_image_bytes,
     )
     app.add_middleware(_OriginAllowlistMiddleware, allowed_origins=origins)
 
@@ -611,6 +612,22 @@ def create_app(
     async def delete_corpus_document(corpus_id: str, document_id: str) -> Response:
         await application_service.delete_corpus_document(corpus_id, document_id)
         return Response(status_code=204)
+
+    @app.post("/api/conversations/{conversation_id}/attachments", status_code=201)
+    async def attach_image(conversation_id: str, request: Request) -> dict[str, Any]:
+        """Recebe uma imagem por multipart e a grava em `anexos/` no Workspace."""
+        form = await request.form()
+        upload = form.get("file")
+        if not isinstance(upload, StarletteUploadFile) or not upload.filename:
+            raise ApplicationServiceError(
+                "file_required",
+                "Envie a imagem no campo `file` de um formulário multipart.",
+                status_code=422,
+            )
+        path = await application_service.attach_image(
+            conversation_id, upload.filename, await upload.read()
+        )
+        return {"path": path}
 
     @app.post("/api/corpora/{corpus_id}/documents", status_code=202)
     async def upload_corpus_document(corpus_id: str, request: Request) -> dict[str, Any]:
@@ -1381,15 +1398,27 @@ class _BodyLimitMiddleware:
     one, and every other path keeps the tighter number.
     """
 
-    def __init__(self, app: ASGIApp, *, max_body_bytes: int, upload_body_bytes: int) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        max_body_bytes: int,
+        upload_body_bytes: int,
+        attachment_body_bytes: int,
+    ) -> None:
         self._app = app
         self._max_body_bytes = max_body_bytes
         self._upload_body_bytes = max(max_body_bytes, upload_body_bytes)
+        # A imagem mais o envelope multipart: o limite da imagem é checado de novo
+        # no service, este só impede um corpo sem fim de chegar lá.
+        self._attachment_body_bytes = max(max_body_bytes, attachment_body_bytes + 64 * 1024)
 
     def _limit(self, scope: Scope) -> int:
         path = str(scope.get("path", ""))
         if path.startswith("/api/corpora/") and path.endswith("/documents"):
             return self._upload_body_bytes
+        if path.startswith("/api/conversations/") and path.endswith("/attachments"):
+            return self._attachment_body_bytes
         return self._max_body_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:

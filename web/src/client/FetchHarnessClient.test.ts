@@ -37,6 +37,24 @@ describe("FetchHarnessClient", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/health", undefined);
   });
 
+  it("anexa a imagem por multipart na conversa e devolve o caminho no Workspace", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ path: "anexos/20260929-print.png" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    const client = new FetchHarnessClient("/api", fetchMock);
+    const file = new File([new Uint8Array([0x89])], "print.png", { type: "image/png" });
+
+    await expect(client.attachImage("chat 1", file)).resolves.toBe("anexos/20260929-print.png");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/conversations/chat%201/attachments");
+    expect(init?.method).toBe("POST");
+    expect((init?.body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
   it("agrupa Conversations e projeta CanonicalHistory sem inventar reasoning ou métricas", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

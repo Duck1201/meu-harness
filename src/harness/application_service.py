@@ -1,4 +1,7 @@
 import asyncio
+import os
+import re
+import tempfile
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -83,7 +86,7 @@ from .ports import (
     VisionRuntime,
 )
 from .system_prompt import build_system_prompt
-from .vision_tools import VisionToolExecutor
+from .vision_tools import VisionToolExecutor, image_format
 from .web_tools import BrowserCapability, BrowserEgressGuard, WebToolExecutor
 from .workspace_coordinator import WorkspaceCoordinator
 
@@ -95,6 +98,12 @@ def _browser_renderer(config: CorpusScraperConfig) -> PageRenderer | None:
     return ScraplingBrowserRenderer(
         stealth=escalation.stealth, timeout_milliseconds=escalation.timeout_milliseconds
     )
+
+
+# Onde as imagens enviadas pela UI entram no Workspace: uma pasta visível, porque
+# o Operator e o modelo precisam achar o arquivo pelo mesmo caminho.
+_ATTACHMENTS_DIRECTORY = "anexos"
+_SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 class ApplicationRuntime(ModelRuntime, Protocol):
@@ -353,6 +362,52 @@ class ApplicationService:
 
     async def get_conversation(self, conversation_id: str) -> Conversation:
         return await self.store.get_conversation(conversation_id)
+
+    async def attach_image(self, conversation_id: str, filename: str, data: bytes) -> str:
+        """Grava uma imagem enviada pelo Operator no Workspace e devolve o caminho.
+
+        O modelo de chat não recebe bytes: a imagem vira um arquivo do Workspace,
+        e o `describe_image` a lê pelo caminho, com o mesmo gate de sempre. O
+        formato é o do magic byte, não o da extensão, e só entra o que a tool de
+        visão aceita — um anexo que ela recusaria é erro agora, não no meio do Turn.
+        """
+        conversation = await self.get_conversation(conversation_id)
+        root = self.workspace_root(conversation.workspace_id)
+        vision = self.config.vision
+        if len(data) > vision.max_image_bytes:
+            raise ApplicationServiceError(
+                "image_too_large",
+                f"A imagem tem {len(data)} bytes e o limite é {vision.max_image_bytes}.",
+                status_code=413,
+            )
+        detected = image_format(data[:16])
+        if detected is None or detected not in vision.accepted_formats:
+            raise ApplicationServiceError(
+                "image_format_not_accepted",
+                "Só PNG, JPEG e WebP são aceitos: são os formatos que a tool de visão lê.",
+                status_code=415,
+            )
+        folder = root / _ATTACHMENTS_DIRECTORY
+        if folder.is_symlink() or (folder.exists() and not folder.is_dir()):
+            raise ApplicationServiceError(
+                "attachments_folder_unavailable",
+                f"`{_ATTACHMENTS_DIRECTORY}` no Workspace não é uma pasta comum.",
+                status_code=409,
+            )
+        folder.mkdir(exist_ok=True)
+        stem = _SAFE_NAME.sub("-", Path(filename).stem).strip("-.")[:60] or "imagem"
+        extension = "jpg" if detected == "jpeg" else detected
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        name = f"{stamp}-{stem}.{extension}"
+        descriptor, temp_name = tempfile.mkstemp(dir=folder, prefix=".upload-")
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(data)
+            os.replace(temp_name, folder / name)
+        except BaseException:
+            Path(temp_name).unlink(missing_ok=True)
+            raise
+        return f"{_ATTACHMENTS_DIRECTORY}/{name}"
 
     async def list_conversations(self, *, include_archived: bool = False) -> list[Conversation]:
         return await self.store.list_conversations(include_archived=include_archived)

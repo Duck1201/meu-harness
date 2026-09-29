@@ -253,6 +253,16 @@ export class FetchHarnessClient implements HarnessClient {
     return payload.job;
   }
 
+  async attachImage(conversationId: string, file: File) {
+    const body = new FormData();
+    body.append("file", file, file.name);
+    const payload = await this.request<{ path: string }>(
+      `/conversations/${encodeURIComponent(conversationId)}/attachments`,
+      { method: "POST", body },
+    );
+    return payload.path;
+  }
+
   async startCorpusScrape(corpusId: string, seed: string) {
     const payload = await this.request<{ job: IngestionJob }>(
       `/corpora/${encodeURIComponent(corpusId)}/jobs`,

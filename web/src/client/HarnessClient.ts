@@ -85,6 +85,8 @@ export interface HarnessClient {
   listCorpusDocuments(corpusId: string): Promise<CorpusDocument[]>;
   deleteCorpusDocument(corpusId: string, documentId: string): Promise<void>;
   uploadCorpusDocument(corpusId: string, file: File): Promise<IngestionJob>;
+  /** Grava a imagem no Workspace da conversa e devolve o caminho relativo. */
+  attachImage(conversationId: string, file: File): Promise<string>;
   startCorpusScrape(corpusId: string, seed: string): Promise<IngestionJob>;
   listCorpusJobs(corpusId: string): Promise<IngestionJob[]>;
   cancelCorpusJob(corpusId: string, jobId: string): Promise<IngestionJob>;

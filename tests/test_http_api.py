@@ -561,3 +561,56 @@ def test_origin_body_limit_and_optional_spa_fallback_are_closed_by_default(
     assert route.text == "<main>Harness UI</main>"
     assert missing_api.status_code == 404
     assert "Harness UI" not in missing_api.text
+
+
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+
+def test_an_attached_image_lands_in_the_workspace_where_describe_image_reads_it(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    app = create_app(service=_service(tmp_path, workspace), static_dir=tmp_path / "missing-dist")
+
+    with TestClient(app, client=LOOPBACK) as client:
+        conversation = client.post(
+            "/api/conversations", json={"workspace_root": str(workspace)}
+        ).json()["conversation"]
+        url = f"/api/conversations/{conversation['id']}/attachments"
+        accepted = client.post(url, files={"file": ("Print da tela (1).PNG", _PNG)})
+        # O formato é o dos bytes: um PNG renomeado para .jpg continua PNG.
+        renamed = client.post(url, files={"file": ("foto.jpg", _PNG)})
+        refused = client.post(url, files={"file": ("nota.avif", b"\x00\x00\x00\x1cftypavif")})
+        missing = client.post(url, data={"nothing": "here"})
+
+    assert accepted.status_code == 201
+    path = accepted.json()["path"]
+    assert path.startswith("anexos/") and path.endswith("-Print-da-tela-1.png")
+    assert (workspace / path).read_bytes() == _PNG
+    assert renamed.json()["path"].endswith("-foto.png")
+    assert refused.status_code == 415
+    assert refused.json()["error"]["code"] == "image_format_not_accepted"
+    assert missing.status_code == 422
+    assert [
+        item.name for item in (workspace / "anexos").iterdir() if item.name.startswith(".")
+    ] == []
+
+
+def test_an_image_over_the_vision_limit_is_refused_before_it_is_written(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    app = create_app(service=_service(tmp_path, workspace), static_dir=tmp_path / "missing-dist")
+    limit = load_config().vision.max_image_bytes
+
+    with TestClient(app, client=LOOPBACK) as client:
+        conversation = client.post(
+            "/api/conversations", json={"workspace_root": str(workspace)}
+        ).json()["conversation"]
+        too_large = client.post(
+            f"/api/conversations/{conversation['id']}/attachments",
+            files={"file": ("grande.png", _PNG + b"\x00" * limit)},
+        )
+
+    assert too_large.status_code == 413
+    assert not (workspace / "anexos").exists()

@@ -326,6 +326,45 @@ describe("App", () => {
     expect(streamSignal?.aborted).toBe(true);
   });
 
+  it("anexa uma imagem, mostra a miniatura e manda o caminho para o modelo", async () => {
+    const user = userEvent.setup();
+    const client = new MockHarnessClient();
+    const attach = vi.spyOn(client, "attachImage");
+    const stream = vi
+      .spyOn(client, "streamAgent")
+      .mockImplementation(async (input) => ({
+        type: "RUN_FINISHED",
+        threadId: input.threadId,
+        runId: input.runId!,
+      }));
+    // jsdom não implementa object URLs; a miniatura só precisa de uma string.
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    URL.revokeObjectURL = vi.fn();
+    render(<App client={client} />);
+
+    await screen.findByRole("heading", { name: "Refinar retenção por conversa" });
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "print.png", {
+      type: "image/png",
+    });
+    await user.upload(screen.getByLabelText("Escolher imagem"), png);
+
+    expect(await screen.findByRole("img", { name: "print.png" })).toBeInTheDocument();
+    expect(attach).toHaveBeenCalledWith("chat-128", png);
+    // Sem texto, a imagem sozinha já é uma pergunta.
+    await user.click(screen.getByRole("button", { name: "Enviar solicitação" }));
+
+    await waitFor(() => expect(stream).toHaveBeenCalled());
+    expect(stream.mock.calls[0]?.[0]).toMatchObject({
+      messages: [
+        {
+          role: "user",
+          content: "O que tem nesta imagem?\n\nImagem anexada: anexos/print.png",
+        },
+      ],
+    });
+    expect(screen.queryByRole("img", { name: "print.png" })).not.toBeInTheDocument();
+  });
+
   it("mostra o consumo da janela de contexto enquanto o turno roda", async () => {
     const user = userEvent.setup();
     const client = new MockHarnessClient();

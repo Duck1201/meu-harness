@@ -447,6 +447,13 @@ export class MockHarnessClient implements HarnessClient {
     this.corpusDocuments = this.corpusDocuments.filter((item) => item.id !== documentId);
   }
 
+  async attachImage(conversationId: string, file: File) {
+    if (!this.conversations.some((item) => item.id === conversationId)) {
+      throw new Error("conversation_not_found");
+    }
+    return `anexos/${file.name}`;
+  }
+
   async uploadCorpusDocument(corpusId: string, file: File) {
     const corpus = this.requireCorpus(corpusId);
     corpus.document_count += 1;

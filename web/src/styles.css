@@ -1440,6 +1440,56 @@ details[open] > summary .summary-chevron {
   line-height: 1.5;
 }
 
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 0 4px;
+  list-style: none;
+}
+
+.composer-attachments li {
+  display: inline-flex;
+  max-width: 220px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.composer-attachments img {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.composer-attachments span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachments button {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.composer-attachments .uploading {
+  padding: 0 10px;
+  min-height: 44px;
+}
+
 .composer textarea::placeholder {
   color: #aaa6af;
 }
