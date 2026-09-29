@@ -18,7 +18,7 @@ from harness.corpus_ingestion import (
     listing_pages,
     source_digest,
 )
-from harness.corpus_store import CorpusStore, EmbeddingMismatchError
+from harness.corpus_store import CorpusStore, EmbeddingMismatchError, exercise_regions
 
 # Largo o bastante para dois textos sem palavra em comum caírem em baldes
 # distintos: com poucas dimensões a colisão sozinha já aproxima o que não tem
@@ -565,3 +565,64 @@ def test_packed_vectors_round_trip_through_the_index(tmp_path: Path) -> None:
     _ingest(store, filename="nota.txt", data=b"Uma frase suficientemente longa para virar chunk.\n")
     assert struct.calcsize(f"{DIMENSIONS}f") == DIMENSIONS * 4
     assert asyncio.run(store.read()).chunk_count == 1
+
+
+_BOOK = (
+    "1.1 O PROXY\n\n"
+    "O proxy escuta na porta 8899 e recusa conexao vinda de fora da rede local.\n\n"
+    "Questões de revisão do Capítulo 1\n\n"
+    "R1. Em que porta o proxy escuta? R2. O proxy recusa conexao de fora? "
+    "R3. Por que a porta 8899? R4. Quem abre a porta? R5. O proxy escuta sempre?\n\n"
+    "Neste capitulo estudaremos o backup em fita magnetica toda madrugada, como ele "
+    "escolhe o que copiar, quanto tempo guarda cada copia, o que acontece quando a fita "
+    "enche e como restaurar um arquivo apagado sem parar o servidor que continua de pe.\n\n"
+    "2.1 O BACKUP\n\n"
+    "O backup roda toda madrugada em fita magnetica e guarda sete copias.\n"
+)
+
+
+def test_exercise_regions_cover_the_questions_and_stop_before_the_next_chapter() -> None:
+    (region,) = exercise_regions(_BOOK)
+    start, end = region
+
+    assert _BOOK[start:].startswith("Questões de revisão do Capítulo 1")
+    assert "R5. O proxy escuta sempre?" in _BOOK[start:end]
+    # A introdução do capítulo seguinte não pergunta nada: é conteúdo e fica fora.
+    assert "Neste capitulo estudaremos o backup" not in _BOOK[start:end]
+
+
+def test_exercise_regions_need_a_next_chapter_and_real_questions() -> None:
+    # Sem capítulo depois, marcar "até o fim" esconderia o que um título mal
+    # reconhecido deixou para trás; sem perguntas, o título não era de exercícios.
+    no_next_chapter = _BOOK.split("2.1 O BACKUP")[0]
+    manual = "1.1 USO\n\nExercícios\n\nAqueça o motor por dez minutos.\n\n2.1 FIM\n\nDesligue.\n"
+
+    assert exercise_regions(no_next_chapter) == ()
+    assert exercise_regions(manual) == ()
+
+
+def test_a_list_of_the_question_is_never_the_passage_that_answers_it(tmp_path: Path) -> None:
+    """Medido no Kurose: a página de exercícios contém a pergunta palavra por palavra."""
+    store = _corpus(tmp_path)
+    _ingest(store, filename="livro.txt", data=_BOOK.encode())
+
+    question = "Em que porta o proxy escuta?"
+    found = asyncio.run(
+        store.search(
+            dense_query=HashingEmbedder().embed([question])[0],
+            lexical_queries=[question],
+            limit=6,
+        )
+    )
+    intro = asyncio.run(
+        store.search(
+            dense_query=HashingEmbedder().embed(["capitulo estudaremos backup"])[0],
+            lexical_queries=["capitulo estudaremos backup"],
+            limit=6,
+        )
+    )
+
+    assert found
+    assert all("R1." not in chunk.text for chunk in found)
+    assert any("8899" in chunk.text for chunk in found)
+    assert any("Neste capitulo estudaremos" in chunk.text for chunk in intro)

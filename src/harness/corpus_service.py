@@ -11,6 +11,7 @@ about what to do when nothing came back.
 """
 
 import asyncio
+import re
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
@@ -51,6 +52,14 @@ CITATION_INSTRUCTION = (
     "do state a fact from the Corpus, take it only from these passages, cite the "
     "one you used by its marker — [1], [2] — and never merge two into one claim."
 )
+# Seis vagas não cobrem uma atividade de vinte perguntas; o resto é o modelo que
+# vai buscar, e ele precisa saber qual resto é esse.
+SEVERAL_QUESTIONS_INSTRUCTION = (
+    "The request asks several questions, and each passage says in for_question "
+    "which one it was retrieved for. Before answering any question listed in "
+    "questions_without_passages, call corpus_search with that question; do not "
+    "answer it from memory as if the Corpus said it."
+)
 NOTHING_FOUND_INSTRUCTION = (
     "The Corpus the Operator selected has nothing relevant to this request. Say so "
     "plainly instead of answering from memory, and do not present anything you "
@@ -85,6 +94,10 @@ class Retrieval:
     # juiz está desligado — não é zero, é "ninguém julgou".
     coverage: tuple[float, ...] | None = None
     coverage_threshold: float = 0.5
+    # Mensagem com várias perguntas: todas, e a que trouxe cada passagem. Vazio
+    # quando a mensagem é uma pergunta só.
+    questions: tuple[str, ...] = ()
+    asked: tuple[str, ...] = ()
 
     @property
     def taints(self) -> tuple[str, ...]:
@@ -120,8 +133,19 @@ class Retrieval:
             }
             if self.coverage is not None:
                 passage["answers_the_request"] = round(self.coverage[index - 1], 2)
+            if self.asked:
+                passage["for_question"] = self.asked[index - 1]
             passages.append(passage)
-        return {"corpus": self.corpus_name, "instruction": instruction, "passages": passages}
+        payload: dict[str, JsonValue] = {
+            "corpus": self.corpus_name,
+            "instruction": instruction,
+            "passages": passages,
+        }
+        uncovered = [question for question in self.questions if question not in self.asked]
+        if self.questions:
+            payload["instruction"] = f"{instruction} {SEVERAL_QUESTIONS_INSTRUCTION}"
+            payload["questions_without_passages"] = cast(list[JsonValue], uncovered)
+        return payload
 
 
 class CorpusLibrary:
@@ -208,6 +232,30 @@ class CorpusLibrary:
         return tuple(sorted(self._directory.glob("*.sqlite3")))
 
 
+# Onde uma mensagem de atividade começa cada pergunta: "3 -" (ou com travessão), "7.", "b)".
+_QUESTION_MARKER = re.compile(r"^\s*(?:\d{1,2}\s*[-\u2013\u2014.)]|[a-z]\))\s*", re.MULTILINE)
+_MIN_QUESTION_WORDS = 3
+
+
+def split_questions(text: str) -> tuple[str, ...]:
+    """As perguntas de uma mensagem que traz várias, na ordem; uma só se não trouxer.
+
+    Um título de enunciado ("Responda o que se pede:") não é pergunta e sai.
+    """
+    starts = [match.start() for match in _QUESTION_MARKER.finditer(text)]
+    if len(starts) < 2:
+        return (text,)
+    pieces = [text[a:b] for a, b in zip(starts, [*starts[1:], len(text)], strict=True)]
+    parts = tuple(
+        cleaned
+        for piece in pieces
+        if len((cleaned := " ".join(_QUESTION_MARKER.sub("", piece, count=1).split())).split())
+        >= _MIN_QUESTION_WORDS
+        and not cleaned.endswith(":")
+    )
+    return parts if len(parts) > 1 else (text,)
+
+
 class CorpusRetriever:
     """One search, whoever asked for it.
 
@@ -250,6 +298,9 @@ class CorpusRetriever:
     ) -> Retrieval:
         corpus = await self._library.read(corpus_id)
         settings = self._config.retrieval
+        parts = split_questions(question)
+        if len(parts) > 1:
+            return await self._retrieve_each(corpus_id, corpus.name, question, parts, limit)
         vector = (await self._embedder.embed([question]))[0]
         chunks = await self._library.store(corpus_id).search(
             dense_query=vector,
@@ -270,6 +321,77 @@ class CorpusRetriever:
             coverage=await self._coverage(question, kept),
             coverage_threshold=self._config.answer_judge.threshold,
         )
+
+    async def _retrieve_each(
+        self,
+        corpus_id: str,
+        corpus_name: str,
+        question: str,
+        parts: Sequence[str],
+        limit: int | None,
+    ) -> Retrieval:
+        """Uma busca por pergunta, e as vagas em rodízio entre elas.
+
+        Medido no Kurose (2026-09-29): uma mensagem com 11 questões virava uma
+        busca só, o embedding da mensagem inteira não se parecia com nenhum trecho
+        e as seis vagas vieram do índice do livro — 1 das 5 respostas conferidas.
+        A reescrita em inglês fica de fora: ela resume a mensagem toda e não
+        serve a nenhuma pergunta em particular.
+        """
+        settings = self._config.retrieval
+        slots = limit or settings.injected_passages
+        vectors = await self._embedder.embed(list(parts))
+        store = self._library.store(corpus_id)
+        rankings: list[tuple[RetrievedChunk, ...]] = []
+        for part, vector in zip(parts, vectors, strict=True):
+            rankings.append(
+                await store.search(
+                    dense_query=vector,
+                    lexical_queries=[part],
+                    limit=slots,
+                    dense_candidates=settings.dense_candidates,
+                    lexical_candidates=settings.lexical_candidates,
+                    rank_constant=settings.reciprocal_rank_constant,
+                    similarity_floor=settings.dense_similarity_floor,
+                )
+            )
+        merged: list[RetrievedChunk] = []
+        asked: list[str] = []
+        seen: set[str] = set()
+        for depth in range(slots):
+            for part, ranking in zip(parts, rankings, strict=True):
+                if len(merged) >= slots:
+                    break
+                if depth < len(ranking) and ranking[depth].id not in seen:
+                    seen.add(ranking[depth].id)
+                    merged.append(ranking[depth])
+                    asked.append(part)
+        kept = self._within_budget(merged)
+        return Retrieval(
+            corpus_id=corpus_id,
+            corpus_name=corpus_name,
+            query=question,
+            lexical_query=None,
+            chunks=kept,
+            coverage=await self._coverage_each(asked[: len(kept)], kept),
+            coverage_threshold=self._config.answer_judge.threshold,
+            questions=tuple(parts),
+            asked=tuple(asked[: len(kept)]),
+        )
+
+    async def _coverage_each(
+        self, asked: Sequence[str], chunks: Sequence[RetrievedChunk]
+    ) -> tuple[float, ...] | None:
+        """Cada passagem julgada contra a pergunta que a trouxe, não contra o bloco."""
+        if self._judge is None or not chunks:
+            return None
+        scores: list[float] = []
+        for part, chunk in zip(asked, chunks, strict=True):
+            single = await self._coverage(part, [chunk])
+            if single is None:
+                return None
+            scores.extend(single)
+        return tuple(scores)
 
     async def _coverage(
         self, question: str, chunks: Sequence[RetrievedChunk]
@@ -599,6 +721,7 @@ class CorpusIngestionService:
 __all__ = [
     "CITATION_INSTRUCTION",
     "NOTHING_FOUND_INSTRUCTION",
+    "SEVERAL_QUESTIONS_INSTRUCTION",
     "UNSUPPORTED_INSTRUCTION",
     "CorpusIngestionService",
     "CorpusLibrary",
@@ -607,4 +730,5 @@ __all__ = [
     "IngestionJob",
     "IngestionJobStatus",
     "Retrieval",
+    "split_questions",
 ]

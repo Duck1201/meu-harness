@@ -66,12 +66,16 @@ _SEARCH_WHAT_YOU_DO_NOT_KNOW = (
     "that needs no outside facts."
 )
 
+# A última frase veio de outro Turn real: "utilizei a busca na web para
+# complementar", numa resposta que não chamou tool nenhuma.
 # Num Turn real a busca voltou vazia e o modelo respondeu "iniciei a busca,
 # aguarde": leu o resultado como algo que ainda estava rodando.
 _RESULTS_ARE_FINAL = (
     "Every tool result is final: nothing keeps running after it, so never tell the "
     "Operator to wait for results. If a search returns nothing, try once with other "
-    "words, then say plainly that nothing was found; if a tool failed, say it failed."
+    "words, then say plainly that nothing was found; if a tool failed, say it failed. "
+    "Never say you searched, read, fetched or ran anything unless you called the tool "
+    "for it in this turn."
 )
 
 

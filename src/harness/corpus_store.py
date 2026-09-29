@@ -93,6 +93,8 @@ class CorpusStore:
 
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
+        # Por id de Documento, que nunca é reaproveitado: reingerir cria outro id.
+        self._exercise_cache: dict[str, tuple[tuple[int, int], ...]] = {}
 
     @property
     def path(self) -> Path:
@@ -338,6 +340,11 @@ class CorpusStore:
                     scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (
                         rank_constant + position + 1
                     )
+            scores = {
+                chunk_id: score
+                for chunk_id, score in scores.items()
+                if chunk_id not in self._exercise_chunks(connection, list(scores))
+            }
             if dense_query is not None:
                 similarities |= self._similarities(
                     connection,
@@ -351,6 +358,49 @@ class CorpusStore:
                 }
             ordered = sorted(scores.items(), key=lambda item: (-item[1], item[0]))[:limit]
             return tuple(self._hydrate(connection, ordered, similarities))
+
+    def _exercise_chunks(
+        self, connection: sqlite3.Connection, chunk_ids: Sequence[str]
+    ) -> frozenset[str]:
+        """Os candidatos que caem numa seção de exercícios do seu documento.
+
+        Medido no Kurose (2026-09-29): as atividades do Operator eram as próprias
+        Questões de revisão do livro, então a página que lista R1 a R9 ganhava a
+        fusão por conter a pergunta palavra por palavra — e o juiz dava 1,0 a
+        ela — em 3 de 5 perguntas, sem nunca responder nenhuma. Uma lista de
+        perguntas não é passagem que sustente resposta.
+        """
+        if not chunk_ids:
+            return frozenset()
+        placeholders = ",".join("?" for _ in chunk_ids)
+        rows = connection.execute(
+            f"SELECT id, document_id, start_offset, end_offset FROM chunks "
+            f"WHERE id IN ({placeholders})",
+            tuple(chunk_ids),
+        ).fetchall()
+        excluded: set[str] = set()
+        for row in rows:
+            regions = self._exercise_regions_for(connection, str(row["document_id"]))
+            start, end = int(row["start_offset"]), int(row["end_offset"])
+            # Maioria, não início: o Chunk que cruza a fronteira carrega a abertura
+            # do capítulo seguinte, e é conteúdo quando a maior parte está fora.
+            inside = sum(max(0, min(end, b) - max(start, a)) for a, b in regions)
+            if inside * 2 > end - start:
+                excluded.add(str(row["id"]))
+        return frozenset(excluded)
+
+    def _exercise_regions_for(
+        self, connection: sqlite3.Connection, document_id: str
+    ) -> tuple[tuple[int, int], ...]:
+        cached = self._exercise_cache.get(document_id)
+        if cached is not None:
+            return cached
+        row = connection.execute(
+            "SELECT text FROM documents WHERE id = ?", (document_id,)
+        ).fetchone()
+        regions = exercise_regions(str(row["text"])) if row is not None else ()
+        self._exercise_cache[document_id] = regions
+        return regions
 
     def exists(self) -> bool:
         return self._path.is_file()
@@ -585,6 +635,48 @@ def _taints(raw: object) -> tuple[str, ...]:
 
 def _packed(vector: Sequence[float]) -> bytes:
     return struct.pack(f"{len(vector)}f", *vector)
+
+
+# Onde começa o bloco de fim de capítulo e onde começa o capítulo seguinte. As
+# duas grafias de cada: o acervo é do Operator e pode ser em português ou inglês.
+_EXERCISE_HEADING = re.compile(
+    r"^(?:quest[õo]es de revis[ãa]o|exerc[íi]cios de fixa[çc][ãa]o|exerc[íi]cios|"
+    r"review questions|homework problems|exercises)\b[^\n]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_CHAPTER_OPENING = re.compile(
+    r"^(?:\d{1,2}\.1\s+\S[^\n]*|(?:cap[íi]tulo|chapter)\s+\d{1,2}\b[^\n]*)$",
+    re.IGNORECASE | re.MULTILINE,
+)
+# Uma região de exercícios pergunta; prosa quase não. Sem esse mínimo, um título
+# "Exercícios" solto no meio de um manual esconderia o manual.
+_EXERCISE_MIN_QUESTIONS = 5
+
+
+def exercise_regions(text: str) -> tuple[tuple[int, int], ...]:
+    """Trechos de fim de capítulo que só perguntam: exercícios, revisão, problemas.
+
+    Vão do título até o parágrafo da última pergunta antes do capítulo seguinte.
+    Sem abertura de capítulo depois, a
+    região não é marcada: fechar "até o fim do documento" apagaria da busca tudo
+    o que viesse depois de um título mal reconhecido.
+    """
+    regions: list[tuple[int, int]] = []
+    for heading in _EXERCISE_HEADING.finditer(text):
+        if regions and heading.start() < regions[-1][1]:
+            continue
+        opening = _CHAPTER_OPENING.search(text, heading.end())
+        if opening is None:
+            continue
+        if text.count("?", heading.start(), opening.start()) < _EXERCISE_MIN_QUESTIONS:
+            continue
+        # A região acaba no parágrafo da última pergunta, não na abertura do
+        # capítulo seguinte: entre os dois fica a introdução desse capítulo, que é
+        # conteúdo. No Kurose, fechar na abertura escondia a do Capítulo 2.
+        last_question = text.rfind("?", heading.start(), opening.start())
+        paragraph_end = text.find("\n\n", last_question, opening.start())
+        regions.append((heading.start(), opening.start() if paragraph_end < 0 else paragraph_end))
+    return tuple(regions)
 
 
 def _fts_expression(query: str) -> str:

@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from test_corpus_store import DIMENSIONS, HashingEmbedder, WordCounter
 
@@ -12,8 +13,10 @@ from harness.corpus_ingestion import build_document, embeddable_texts, extract, 
 from harness.corpus_service import (
     CITATION_INSTRUCTION,
     NOTHING_FOUND_INSTRUCTION,
+    SEVERAL_QUESTIONS_INSTRUCTION,
     CorpusLibrary,
     CorpusRetriever,
+    split_questions,
 )
 from harness.corpus_tools import CorpusToolExecutor, granted_corpus_id
 from harness.domain import Grant, SessionPolicy, ToolCall, ToolResultStatus
@@ -309,3 +312,82 @@ class _EchoRuntime:
     async def generate(self, request: ModelRequest) -> ModelResponse:
         del request
         return ModelResponse(content=self._answer)
+
+
+def test_an_assignment_splits_into_its_questions_and_a_heading_is_not_one() -> None:
+    assignment = (
+        "Preciso que você responda:\n\n"
+        "1 \u2013 Responda o que se pede:\n"
+        "a) Qual é a diferença entre um hospedeiro e um sistema final?\n"
+        "b) Cite os tipos de sistemas finais.\n"
+        "2 - Por que os padrões são importantes para os protocolos?\n"
+    )
+
+    assert split_questions(assignment) == (
+        "Qual é a diferença entre um hospedeiro e um sistema final?",
+        "Cite os tipos de sistemas finais.",
+        "Por que os padrões são importantes para os protocolos?",
+    )
+    assert split_questions("Qual a diferença entre TCP e UDP?") == (
+        "Qual a diferença entre TCP e UDP?",
+    )
+
+
+_TWO_TOPICS = (
+    b"# Manual\n\n## Proxy\n\nO proxy escuta na porta 8899 e recusa conexao de fora.\n\n"
+    b"## Backup\n\nO backup roda toda madrugada em fita magnetica e guarda sete copias.\n"
+)
+
+
+def _plain_retriever(library: CorpusLibrary) -> CorpusRetriever:
+    config = load_config()
+    corpus = config.corpus.model_copy(
+        update={
+            "retrieval": config.corpus.retrieval.model_copy(update={"dense_similarity_floor": 0.2})
+        }
+    )
+    return CorpusRetriever(
+        library=library, embedder=FakeEmbedder(), counter=WordCounter(), config=corpus
+    )
+
+
+def test_each_question_of_an_assignment_gets_its_own_search(tmp_path: Path) -> None:
+    """Medido no Kurose: uma busca para 11 questões trouxe o índice do livro."""
+
+    async def scenario() -> dict[str, object]:
+        library = _library(tmp_path)
+        corpus_id = await _fill(library, filename="manual.md", data=_TWO_TOPICS, origin="upload")
+        retrieval = await _plain_retriever(library).retrieve(
+            corpus_id,
+            "1 - Em que porta o proxy escuta?\n2 - Quando o backup roda em fita?",
+        )
+        return cast(dict[str, object], retrieval.payload())
+
+    payload = asyncio.run(scenario())
+    passages = cast(list[dict[str, object]], payload["passages"])
+
+    texts = " ".join(str(passage["text"]) for passage in passages)
+    assert "8899" in texts and "madrugada" in texts
+    assert {passage["for_question"] for passage in passages} >= {
+        "Em que porta o proxy escuta?",
+        "Quando o backup roda em fita?",
+    }
+    assert payload["questions_without_passages"] == []
+    assert SEVERAL_QUESTIONS_INSTRUCTION in str(payload["instruction"])
+
+
+def test_questions_left_without_a_passage_are_named_for_corpus_search(tmp_path: Path) -> None:
+    async def scenario() -> dict[str, object]:
+        library = _library(tmp_path)
+        corpus_id = await _fill(library, filename="manual.md", data=_TWO_TOPICS, origin="upload")
+        retrieval = await _plain_retriever(library).retrieve(
+            corpus_id,
+            "1 - Em que porta o proxy escuta?\n2 - Quando o backup roda em fita?",
+            limit=1,
+        )
+        return cast(dict[str, object], retrieval.payload())
+
+    payload = asyncio.run(scenario())
+
+    assert len(cast(list[object], payload["passages"])) == 1
+    assert payload["questions_without_passages"] == ["Quando o backup roda em fita?"]

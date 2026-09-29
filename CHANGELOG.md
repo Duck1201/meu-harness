@@ -6,6 +6,14 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ### Alterado
 
+- **RAG: lista de exercícios nunca é passagem, e atividade vira uma busca por
+  pergunta.** No Kurose, as atividades do Operator eram as Questões de revisão do
+  livro, e a página que as lista ganhava a busca por conter a pergunta palavra por
+  palavra (o juiz dava 1,0 a ela) em 3 de 5 perguntas; agora em 0 de 5. Uma
+  mensagem com várias perguntas faz uma busca para cada uma, cada passagem diz a
+  qual responde, e o modelo recebe as que ficaram sem passagem para buscar com
+  `corpus_search`. O prompt proíbe dizer que buscou sem ter chamado a tool.
+
 - **Tools refeitas a partir das conversas reais do Operator.** No `model_smoke` do
   Gemma 4 E4B QAT (34 fixtures × 3 sementes), o código novo fez 101/102 contra
   94/102 do anterior. Os ganhos vieram das fixtures tiradas de Turns reais:
