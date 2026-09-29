@@ -123,7 +123,11 @@ do acervo é do acervo — e o que a forma errada trouxer não passa do piso.
 
 Nenhum fato ingerido passa por paráfrase: o Document é armazenado como foi
 extraído e limpo por regras determinísticas, e o que o Chunk acrescenta é um
-prefixo de contexto tirado da estrutura do próprio documento. Um Chunk não
+prefixo de contexto tirado da estrutura do próprio documento. A única extração
+feita por modelo é o OCR de PDF sem camada de texto: o texto transcrito recebe
+OcrTranscribedTaint e a passagem que vem dele avisa o modelo de que é leitura
+automática ([ADR-0018](adr/0018-ocr-for-scanned-pdfs.md)); PDF que tem camada
+não passa por OCR, e nada ingerido passa por resumo, reescrita ou tradução. Um Chunk não
 começa no meio de um parágrafo; quando o extrator não consegue dizer onde o
 parágrafo termina — o texto de uma página de PDF chega sem essa marca —, o bloco
 que sozinho estoura o orçamento é cortado em fim de frase, que é a promessa que

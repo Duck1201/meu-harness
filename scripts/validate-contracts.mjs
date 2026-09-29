@@ -648,6 +648,20 @@ if (profilesDocument && harness && registry && fixturesDocument && experimentsDo
       harness.corpus?.retrieval?.translate_documents === false,
     "ingestão não pode indexar texto escrito nem traduzido pelo modelo",
   );
+  // A única leitura de modelo que entra no índice é a transcrição de página
+  // escaneada, e só marcada: o taint é o que diz ao modelo de chat que a passagem
+  // é leitura de OCR e não a camada de texto do arquivo (ADR 0018).
+  const ocr = harness.corpus?.ingestion?.ocr;
+  if (ocr?.mode === "enabled") {
+    check(
+      harness.corpus.ingestion.ocr_transcription_is_indexed_only_when_marked === true &&
+        ocr.applies_to === "pdf_without_text_layer_only" &&
+        ocr.taint === "OcrTranscribedTaint" &&
+        shaPattern.test(ocr.ollama_digest ?? "") &&
+        fs.existsSync(path.join(root, ocr.adr ?? "")),
+      "OCR só para PDF sem camada de texto, marcado com OcrTranscribedTaint, com digest e ADR",
+    );
+  }
   // O piso não pode morar no escore de fusão: rank recíproco ordena e não mede,
   // e o primeiro colocado pontua igual respondendo ou não à pergunta.
   check(

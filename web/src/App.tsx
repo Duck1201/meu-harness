@@ -2107,13 +2107,19 @@ function CorpusJobRow({ job, onCancel }: { job: IngestionJob; onCancel: () => vo
       <div>
         <strong>{job.origin}</strong>
         <span>
+          {job.kind === "ocr" ? "OCR (PDF escaneado) · " : ""}
           {job.status} · {job.indexed} indexados · {job.skipped} pulados · {job.chunks} chunks
           {job.current ? ` · ${job.current}` : ""}
           {job.detail && !active ? ` · ${job.detail}` : ""}
         </span>
       </div>
       {active && (
-        <button className="icon-button" type="button" aria-label="Cancelar coleta" onClick={onCancel}>
+        <button
+          className="icon-button"
+          type="button"
+          aria-label={job.kind === "ocr" ? "Cancelar OCR" : "Cancelar coleta"}
+          onClick={onCancel}
+        >
           <CircleStop size={15} />
         </button>
       )}

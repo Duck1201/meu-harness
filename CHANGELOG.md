@@ -50,6 +50,11 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ### Adicionado
 
+- **OCR de PDF escaneado no RAG** ([ADR-0018](docs/adr/0018-ocr-for-scanned-pdfs.md)).
+  O PDF sem camada de texto, antes recusado, vira um job em segundo plano:
+  `pdftoppm` renderiza cada página e o GLM-OCR lê, ~10 s por página. O texto entra
+  com `OcrTranscribedTaint` e a passagem avisa o modelo. Só para PDF sem camada:
+  refazer por OCR a camada ruim do Kurose trocava erros e perdia acentos.
 - **Limpar todas as conversas**, na barra lateral, com confirmação. Apaga as
   arquivadas também e cancela o Turn que estiver rodando antes; acervos de RAG e
   arquivos do Workspace ficam (`DELETE /api/conversations`).

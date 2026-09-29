@@ -16,6 +16,7 @@ from .config import CorpusScraperConfig, HarnessConfig, ToolRegistryConfig, Visi
 from .context_builder import ContextBuilder
 from .conversation_store import ConversationStore, NotFoundError
 from .corpus_browser import ScraplingBrowserRenderer
+from .corpus_ocr import PageOcr, PdfPageRenderer
 from .corpus_scraper import PageRenderer, Scraper
 from .corpus_service import (
     CorpusIngestionService,
@@ -155,6 +156,8 @@ class ApplicationService:
         embedder: EmbeddingRuntime | None = None,
         answer_judge: CorpusAnswerJudge | None = None,
         vision_runtime: VisionRuntime | None = None,
+        page_renderer: PdfPageRenderer | None = None,
+        page_ocr: PageOcr | None = None,
     ) -> None:
         roots: list[Path] = []
         for candidate in allowed_workspace_roots:
@@ -254,6 +257,8 @@ class ApplicationService:
                     renderer=_browser_renderer(config.corpus.scraper),
                 ),
                 recorder=observability_store,
+                page_renderer=page_renderer,
+                page_ocr=page_ocr,
             )
             if self.corpus_library is not None and embedder is not None and counter is not None
             else None

@@ -28,6 +28,9 @@ LOCAL_INFERENCE_EFFECT = "local_inference"
 # The mark every derivation of web content keeps. Written here because the Corpus
 # applies it at ingestion, long before any Turn sees the Chunk.
 UNTRUSTED_WEB_TAINT = "UntrustedWebTaint"
+# Texto lido de página escaneada por um modelo de OCR (ADR 0018). Não é a camada
+# de texto do arquivo: é a leitura de um modelo, e pode trocar letra e dígito.
+OCR_TRANSCRIBED_TAINT = "OcrTranscribedTaint"
 
 # The refusal each grant produces when it is missing. Shared data, not a shared
 # gate: both executors still check their own calls, they just name the refusal the

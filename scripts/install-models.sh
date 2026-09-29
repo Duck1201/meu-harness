@@ -6,6 +6,7 @@
 #   harness-bge-m3             modelfiles/bge_m3_embedding             bge-m3:latest       (embedding do Corpus)
 #   harness-vision-qwen35-2b   modelfiles/qwen35_2b_vision             qwen3.5:2b-q4_K_M   (visão, ADR 0016)
 #   harness-judge-ptbr-v2      modelfiles/harness_judge_ptbr_v2        GGUF do ~/judge-train (ADR 0015)
+#   harness-ocr-glm            modelfiles/glm_ocr                      glm-ocr:latest      (OCR, ADR 0018)
 #
 # Idempotente: pull de modelo já presente só confere o manifest.
 set -euo pipefail
@@ -13,13 +14,14 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 
-for tag in gemma4:e4b-it-qat bge-m3:latest qwen3.5:2b-q4_K_M; do
+for tag in gemma4:e4b-it-qat bge-m3:latest qwen3.5:2b-q4_K_M glm-ocr:latest; do
   ollama pull "$tag"
 done
 
 ollama create harness-gemma4-e4b-qat -f modelfiles/gemma4_e4b_qat_ollama.Modelfile
 ollama create harness-bge-m3 -f modelfiles/bge_m3_embedding.Modelfile
 ollama create harness-vision-qwen35-2b -f modelfiles/qwen35_2b_vision.Modelfile
+ollama create harness-ocr-glm -f modelfiles/glm_ocr.Modelfile
 
 judge_gguf=$(sed -n 's/^FROM //p' modelfiles/harness_judge_ptbr_v2.Modelfile)
 if [[ -f "$judge_gguf" ]]; then

@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "manifest_version": "2.0.0",
-  "manifest_digest_sha256": "afef0f02adbeaaef0ee6965dff4264f1be25b0148ebd39fb5eb65056a626836c",
+  "manifest_digest_sha256": "871c1c88b840eb74c0fe08d74b198e998cf2cd038eb88cf8b8cf554750d9b411",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -22,7 +22,7 @@
   },
   "contract_digests": {
     "model_profiles_sha256": "76d4ea5a9201e1d8a53141371ed0bb81bd0ed4d4c57aa28bc2f791d8985f5bdf",
-    "harness_sha256": "c634261d92626ea6c5783547a88e8c0c3c09fa3df3f12907494b4b133ca82115",
+    "harness_sha256": "c7d3853cd9c57f1f539cd98b4ab3c9a92c63e444c96702d5796940ccf7f2e51c",
     "tool_registry_sha256": "774a7083f17f5ef4cc15c8d46013b0648746741f250e9c5c9f3da0c1aff69149"
   },
   "primary_surface": "web",

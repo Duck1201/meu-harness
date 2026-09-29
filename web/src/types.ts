@@ -182,7 +182,7 @@ export type IngestionJobStatus =
 export interface IngestionJob {
   id: string;
   corpus_id: string;
-  kind: "upload" | "scrape";
+  kind: "upload" | "scrape" | "ocr";
   origin: string;
   status: IngestionJobStatus;
   seen: number;

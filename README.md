@@ -73,6 +73,7 @@ versionado em [`modelfiles/`](modelfiles/) sobre a base oficial:
 | `harness-bge-m3` | `bge_m3_embedding.Modelfile` | `bge-m3:latest` | embedding do Corpus |
 | `harness-vision-qwen35-2b` | `qwen35_2b_vision.Modelfile` | `qwen3.5:2b-q4_K_M` | tool de visão |
 | `harness-judge-ptbr-v2` | `harness_judge_ptbr_v2.Modelfile` | GGUF do `~/judge-train` | juiz do Corpus |
+| `harness-ocr-glm` | `glm_ocr.Modelfile` | `glm-ocr:latest` | OCR de PDF escaneado |
 
 Só o perfil core, à mão:
 
@@ -407,11 +408,21 @@ A aba **RAG** monta acervos de documentos. Cada Corpus é um arquivo SQLite em
 `$XDG_STATE_HOME/meu-harness/corpora/`, isolado dos outros e dos dois stores do
 harness; apagar o Corpus apaga o arquivo, e a retenção de conversas não o alcança.
 
-Alimente por upload (`.txt`, `.md`, `.html`, `.pdf` — PDF digitalizado é recusado,
-não há OCR) ou por coleta web. Uma semente que responde `/api.php` é coletada pela
-API do MediaWiki, que devolve a wiki inteira em texto puro; qualquer outro site
-cai num crawl com teto que respeita `robots.txt`. A coleta roda em segundo plano,
-mostra progresso e pode ser cancelada; disparar de novo pula o que já entrou.
+Alimente por upload (`.txt`, `.md`, `.html`, `.pdf`) ou por coleta web. Uma semente
+que responde `/api.php` é coletada pela API do MediaWiki, que devolve a wiki inteira
+em texto puro; qualquer outro site cai num crawl com teto que respeita `robots.txt`.
+A coleta roda em segundo plano, mostra progresso e pode ser cancelada; disparar de
+novo pula o que já entrou.
+
+PDF escaneado, sem camada de texto, passa por OCR
+([ADR-0018](docs/adr/0018-ocr-for-scanned-pdfs.md)): cada página é renderizada pelo
+`pdftoppm` (pacote `poppler-utils`) e lida pelo GLM-OCR (`harness-ocr-glm`, de
+`modelfiles/glm_ocr.Modelfile`), em segundo plano, com progresso por página
+(~10 s por página na RX 7600). O texto entra marcado como transcrição automática, e
+a passagem avisa o modelo de que pode ter letra ou dígito trocado. PDF que já tem
+camada de texto não passa por OCR: medido no Kurose, o OCR trocava os erros da
+camada por outros e perdia acentos. Sem o `pdftoppm` ou o modelo, o PDF escaneado
+continua recusado.
 
 Cada Conversation escolhe um Corpus ou "Desligado", no painel de contexto do chat.
 A escolha é o `CorpusGrant`: enquanto estiver ligada, o harness recupera as passagens antes

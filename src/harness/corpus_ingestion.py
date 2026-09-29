@@ -19,10 +19,10 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from io import BytesIO
-from typing import Literal
+from typing import Any, Literal, cast
 
 from .corpus_store import ChunkDraft, DocumentDraft
-from .domain import UNTRUSTED_WEB_TAINT
+from .domain import OCR_TRANSCRIBED_TAINT, UNTRUSTED_WEB_TAINT
 from .ports import TextTokenCounter
 from .web_tools import SUPPRESSED_HTML_TAGS, without_link_menus
 
@@ -241,7 +241,7 @@ def extract_pdf(filename: str, data: bytes) -> ExtractedDocument:
         # ("recupera ção"). Medido num livro de 660 páginas: 655 blocos de 550
         # palavras viram 3453 de 104 — parágrafo de verdade, que é a fronteira
         # que o Chunk procura.
-        pages = [page.extract_text(extraction_mode="layout") or "" for page in reader.pages]
+        pages = [_page_text(page) for page in reader.pages]
     except (PdfReadError, ValueError, OSError) as error:
         raise UnsupportedSourceError(
             "pdf_unreadable",
@@ -249,14 +249,55 @@ def extract_pdf(filename: str, data: bytes) -> ExtractedDocument:
         ) from error
     if not any(page.strip() for page in pages):
         raise UnsupportedSourceError(
-            "pdf_without_text_layer",
+            PDF_WITHOUT_TEXT_LAYER,
             "Este PDF não tem camada de texto — provavelmente é digitalizado. "
-            "O harness não faz OCR; passe o arquivo por um OCR antes de subir.",
+            "Sem o OCR disponível neste host (o `pdftoppm`, do pacote poppler-utils, "
+            "e o modelo de OCR no Ollama), ele não pode ser indexado.",
         )
+    return document_from_pdf_pages(_pdf_title(reader) or _stem(filename), pages)
+
+
+PDF_WITHOUT_TEXT_LAYER = "pdf_without_text_layer"
+
+
+def _page_text(page: object) -> str:
+    """O texto de uma página, ou nada: página sem conteúdo não derruba o arquivo.
+
+    Uma página em branco — comum em livro escaneado, a contracapa — não tem
+    `/Contents`, e o `pypdf` levanta `KeyError` ao extrair; antes disso matava a
+    ingestão do documento inteiro por causa de uma folha vazia.
+    """
+    try:
+        return cast(Any, page).extract_text(extraction_mode="layout") or ""
+    except KeyError:
+        return ""
+
+
+def pdf_page_count_and_title(filename: str, data: bytes) -> tuple[int, str]:
+    """Quantas páginas e o título, sem ler texto: o que o OCR precisa para começar."""
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+
+    try:
+        reader = PdfReader(BytesIO(data))
+        return len(reader.pages), _pdf_title(reader) or _stem(filename)
+    except (PdfReadError, ValueError, OSError) as error:
+        raise UnsupportedSourceError(
+            "pdf_unreadable",
+            "Não foi possível ler este PDF: o arquivo parece corrompido ou protegido.",
+        ) from error
+
+
+def document_from_pdf_pages(title: str, pages: Sequence[str]) -> ExtractedDocument:
+    """A limpeza de PDF, seja o texto da camada do arquivo ou o do OCR.
+
+    O mesmo caminho para os dois: cabeçalho que se repete em toda página,
+    listagens e parágrafos quebrados são defeito de página impressa, e o OCR lê
+    a página impressa.
+    """
     cleaned_pages = [_normalized(page) for page in pages]
     furniture = _repeated_page_furniture(cleaned_pages)
     listing = listing_pages(cleaned_pages)
-    title = _pdf_title(reader) or _stem(filename)
     blocks: list[SourceBlock] = []
     for number, page in enumerate(cleaned_pages, start=1):
         if number in listing:
@@ -287,6 +328,7 @@ def build_document(
     chunk_tokens: int = 512,
     overlap_tokens: int = 64,
     minimum_tokens: int = 8,
+    transcribed_by_ocr: bool = False,
 ) -> DocumentDraft:
     """Cleans the blocks and cuts them into Chunks, offsets included.
 
@@ -348,7 +390,9 @@ def build_document(
     # a página existe, e o piso está aqui para escolher entre passagens, não
     # para decidir que a página não conta.
     above_floor = [chunk for chunk in chunks if chunk.token_count >= minimum_tokens]
-    taints = (UNTRUSTED_WEB_TAINT,) if origin_kind == "scrape" else ()
+    taints = ((UNTRUSTED_WEB_TAINT,) if origin_kind == "scrape" else ()) + (
+        (OCR_TRANSCRIBED_TAINT,) if transcribed_by_ocr else ()
+    )
     return DocumentDraft(
         origin_kind=origin_kind,
         origin_ref=origin_ref,

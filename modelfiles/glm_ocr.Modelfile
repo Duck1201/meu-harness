@@ -1,0 +1,9 @@
+# Meu Harness — OCR de PDF escaneado no Corpus (harness-ocr-glm, ADR 0018).
+#
+# Os mesmos valores que o OllamaPageOcr manda em cada request
+# (config/harness.json#corpus.ingestion.ocr): transcrição a temperatura 0, que
+# amostrar só troca letra. As options do request continuam prevalecendo.
+FROM glm-ocr:latest
+
+PARAMETER temperature 0
+PARAMETER num_ctx 16384

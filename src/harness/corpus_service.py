@@ -22,12 +22,17 @@ from uuid import uuid4
 
 from .config import CorpusConfig
 from .corpus_ingestion import (
+    PDF_WITHOUT_TEXT_LAYER,
+    ExtractedDocument,
     UnsupportedSourceError,
     build_document,
+    document_from_pdf_pages,
     embeddable_texts,
     extract,
+    pdf_page_count_and_title,
     source_digest,
 )
+from .corpus_ocr import OcrError, PageOcr, PdfPageRenderer, transcribe_pdf
 from .corpus_scraper import ScrapeError, Scraper
 from .corpus_store import (
     CorpusNotFoundError,
@@ -36,7 +41,7 @@ from .corpus_store import (
     corpus_id_from_name,
     valid_corpus_id,
 )
-from .domain import UNTRUSTED_WEB_TAINT, Corpus, JsonValue, RetrievedChunk
+from .domain import OCR_TRANSCRIBED_TAINT, UNTRUSTED_WEB_TAINT, Corpus, JsonValue, RetrievedChunk
 from .ports import CorpusAnswerJudge, EmbeddingRuntime, TextTokenCounter
 from .web_tools import EgressPolicyError
 
@@ -59,6 +64,13 @@ SEVERAL_QUESTIONS_INSTRUCTION = (
     "which one it was retrieved for. Before answering any question listed in "
     "questions_without_passages, call corpus_search with that question; do not "
     "answer it from memory as if the Corpus said it."
+)
+# A passagem de um PDF escaneado é a leitura de um modelo de OCR (ADR 0018).
+OCR_PASSAGE_INSTRUCTION = (
+    "Passages marked transcribed_by_ocr were read from a scanned page by an OCR "
+    "model and can misspell words or misread digits; when an answer depends on an "
+    "exact number or name from one of them, say that it comes from an automatic "
+    "transcription."
 )
 NOTHING_FOUND_INSTRUCTION = (
     "The Corpus the Operator selected has nothing relevant to this request. Say so "
@@ -131,6 +143,8 @@ class Retrieval:
                 "untrusted": UNTRUSTED_WEB_TAINT in chunk.taints,
                 "text": chunk.text,
             }
+            if OCR_TRANSCRIBED_TAINT in chunk.taints:
+                passage["transcribed_by_ocr"] = True
             if self.coverage is not None:
                 passage["answers_the_request"] = round(self.coverage[index - 1], 2)
             if self.asked:
@@ -141,9 +155,11 @@ class Retrieval:
             "instruction": instruction,
             "passages": passages,
         }
+        if any(OCR_TRANSCRIBED_TAINT in chunk.taints for chunk in self.chunks):
+            payload["instruction"] = f"{payload['instruction']} {OCR_PASSAGE_INSTRUCTION}"
         uncovered = [question for question in self.questions if question not in self.asked]
         if self.questions:
-            payload["instruction"] = f"{instruction} {SEVERAL_QUESTIONS_INSTRUCTION}"
+            payload["instruction"] = f"{payload['instruction']} {SEVERAL_QUESTIONS_INSTRUCTION}"
             payload["questions_without_passages"] = cast(list[JsonValue], uncovered)
         return payload
 
@@ -483,6 +499,8 @@ class CorpusIngestionService:
         config: CorpusConfig,
         scraper: Scraper | None = None,
         recorder: IngestionRecorder | None = None,
+        page_renderer: PdfPageRenderer | None = None,
+        page_ocr: PageOcr | None = None,
     ) -> None:
         self._library = library
         self._embedder = embedder
@@ -490,6 +508,8 @@ class CorpusIngestionService:
         self._config = config
         self._scraper = scraper
         self._recorder = recorder
+        self._page_renderer = page_renderer
+        self._page_ocr = page_ocr
         self._jobs: dict[str, IngestionJob] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -532,6 +552,8 @@ class CorpusIngestionService:
                 origin_ref=filename,
             )
         except UnsupportedSourceError as error:
+            if error.code == PDF_WITHOUT_TEXT_LAYER and self.ocr_available:
+                return self._start_ocr(job.id, corpus_id, filename, data)
             return await self._finished(
                 job.id,
                 status=IngestionJobStatus.FAILED,
@@ -554,6 +576,78 @@ class CorpusIngestionService:
             indexed=1 if indexed else 0,
             skipped=0 if indexed else 1,
             chunks=indexed,
+            current=None,
+        )
+
+    @property
+    def ocr_available(self) -> bool:
+        return self._page_renderer is not None and self._page_ocr is not None
+
+    def _start_ocr(self, job_id: str, corpus_id: str, filename: str, data: bytes) -> IngestionJob:
+        """O PDF escaneado não espera na requisição: um livro leva horas (ADR 0018)."""
+        job = self._update(job_id, kind="ocr", status=IngestionJobStatus.RUNNING)
+        self._tasks[job_id] = asyncio.create_task(
+            self._run_ocr(job_id, corpus_id, filename, data),
+            name=f"harness-corpus-ocr-{job_id}",
+        )
+        return job
+
+    async def _run_ocr(self, job_id: str, corpus_id: str, filename: str, data: bytes) -> None:
+        assert self._page_renderer is not None and self._page_ocr is not None
+        try:
+            pages, title = pdf_page_count_and_title(filename, data)
+            self._update(job_id, detail=f"{pages} páginas", current=f"página 0 de {pages}")
+
+            async def on_page(page: int) -> None:
+                self._update(job_id, seen=page, current=f"página {page} de {pages}")
+
+            texts = await transcribe_pdf(
+                data, pages, renderer=self._page_renderer, ocr=self._page_ocr, on_page=on_page
+            )
+            produced = await self._index(
+                corpus_id,
+                document_from_pdf_pages(title, texts),
+                data=data,
+                origin_kind="upload",
+                origin_ref=filename,
+                transcribed_by_ocr=True,
+            )
+        except asyncio.CancelledError:
+            await self._finished(job_id, status=IngestionJobStatus.CANCELED, current=None)
+            raise
+        except OcrError as error:
+            code = (error.error or {}).get("code", "ocr_failed")
+            await self._finished(
+                job_id,
+                status=IngestionJobStatus.FAILED,
+                reason_code=str(code),
+                detail=str(error),
+                current=None,
+            )
+            return
+        except (UnsupportedSourceError, CorpusStoreError) as error:
+            await self._finished(
+                job_id,
+                status=IngestionJobStatus.FAILED,
+                reason_code=getattr(error, "code", "corpus_store_error"),
+                detail=str(error),
+                current=None,
+            )
+            return
+        except Exception as error:
+            await self._finished(
+                job_id,
+                status=IngestionJobStatus.FAILED,
+                reason_code="ingestion_error",
+                detail=f"{type(error).__name__}: {error}",
+                current=None,
+            )
+            return
+        await self._finished(
+            job_id,
+            status=IngestionJobStatus.COMPLETED,
+            indexed=1,
+            chunks=produced,
             current=None,
         )
 
@@ -651,6 +745,22 @@ class CorpusIngestionService:
                 f"O arquivo passa do limite de {settings.max_upload_bytes // (1024 * 1024)} MB.",
             )
         extracted = extract(filename, data, html_extractor=settings.html_extractor)
+        del title
+        return await self._index(
+            corpus_id, extracted, data=data, origin_kind=origin_kind, origin_ref=origin_ref
+        )
+
+    async def _index(
+        self,
+        corpus_id: str,
+        extracted: ExtractedDocument,
+        *,
+        data: bytes,
+        origin_kind: str,
+        origin_ref: str,
+        transcribed_by_ocr: bool = False,
+    ) -> int:
+        settings = self._config.ingestion
         draft = build_document(
             extracted,
             origin_kind=origin_kind,
@@ -660,8 +770,8 @@ class CorpusIngestionService:
             chunk_tokens=settings.chunk_target_tokens,
             overlap_tokens=settings.chunk_overlap_tokens,
             minimum_tokens=settings.chunk_minimum_tokens,
+            transcribed_by_ocr=transcribed_by_ocr,
         )
-        del title
         if not draft.chunks:
             raise UnsupportedSourceError(
                 "no_indexable_text",
@@ -721,6 +831,7 @@ class CorpusIngestionService:
 __all__ = [
     "CITATION_INSTRUCTION",
     "NOTHING_FOUND_INSTRUCTION",
+    "OCR_PASSAGE_INSTRUCTION",
     "SEVERAL_QUESTIONS_INSTRUCTION",
     "UNSUPPORTED_INSTRUCTION",
     "CorpusIngestionService",

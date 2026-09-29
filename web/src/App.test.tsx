@@ -482,6 +482,42 @@ describe("App", () => {
     expect(await screen.findByText(/Última resposta: 56\.0 tok\/s/)).toBeInTheDocument();
   });
 
+  it("mostra o OCR de um PDF escaneado com o progresso por página", async () => {
+    const user = userEvent.setup();
+    const client = new MockHarnessClient();
+    const original = client.getCorporaSnapshot.bind(client);
+    vi.spyOn(client, "getCorporaSnapshot").mockImplementation(async () => {
+      const snapshot = await original();
+      const corpusId = snapshot.corpora[0]?.id ?? "manual";
+      return {
+        ...snapshot,
+        jobs: [
+          {
+            id: "job-ocr",
+            corpus_id: corpusId,
+            kind: "ocr",
+            origin: "livro-escaneado.pdf",
+            status: "running",
+            seen: 3,
+            indexed: 0,
+            skipped: 0,
+            chunks: 0,
+            current: "página 3 de 120",
+            reason_code: null,
+            detail: "120 páginas",
+          },
+        ],
+      };
+    });
+    render(<App client={client} />);
+
+    await user.click(await screen.findByRole("button", { name: /RAG/ }));
+
+    expect(await screen.findByText(/OCR \(PDF escaneado\)/)).toBeInTheDocument();
+    expect(screen.getByText(/página 3 de 120/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancelar OCR" })).toBeInTheDocument();
+  });
+
   it("mostra o consumo da janela de contexto enquanto o turno roda", async () => {
     const user = userEvent.setup();
     const client = new MockHarnessClient();

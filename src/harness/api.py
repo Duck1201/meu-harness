@@ -1,12 +1,13 @@
 # pyright: reportUnusedFunction=false
 
+import shutil
 import sys
 from collections.abc import AsyncGenerator, AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from ipaddress import ip_address
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, TypedDict, cast
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -22,6 +23,7 @@ from .auth import AuthenticationError, SessionController, hash_password, verify_
 from .config import HarnessConfig, RuntimeBackend, load_config
 from .conversation_store import ConversationStore, NotFoundError
 from .corpus_judge import OllamaRerankerAnswerJudge
+from .corpus_ocr import OllamaPageOcr, PdftoppmRenderer
 from .corpus_service import IngestionJob
 from .domain import (
     CanonicalHistoryEntry,
@@ -974,6 +976,7 @@ def _default_service(
         embedder=embedder,
         answer_judge=_answer_judge(config, host_config),
         vision_runtime=_vision_runtime(config, host_config),
+        **_scanned_pdf_ocr(config, host_config),
     )
 
 
@@ -989,6 +992,33 @@ def _answer_judge(
         model=settings.ollama_tag,
         expected_digest=settings.ollama_digest,
     )
+
+
+class _ScannedPdfOcr(TypedDict, total=False):
+    page_renderer: PdftoppmRenderer
+    page_ocr: OllamaPageOcr
+
+
+def _scanned_pdf_ocr(config: HarnessConfig, host_config: HostConfig | None) -> _ScannedPdfOcr:
+    """O OCR de PDF escaneado precisa do contrato ligado e do `pdftoppm` no host (ADR 0018).
+
+    Faltando qualquer um dos dois, o PDF escaneado continua recusado, com a
+    mensagem dizendo o que instalar: meia configuração não vira OCR pela metade.
+    """
+    settings = config.corpus.ingestion.ocr
+    executable = shutil.which("pdftoppm")
+    if settings.mode != "enabled" or executable is None:
+        return {}
+    return {
+        "page_renderer": PdftoppmRenderer(executable, dpi=settings.render_dpi),
+        "page_ocr": OllamaPageOcr(
+            base_url=host_config.ollama_url if host_config is not None else DEFAULT_OLLAMA_URL,
+            model=settings.ollama_tag,
+            expected_digest=settings.ollama_digest,
+            max_output_tokens=settings.max_output_tokens,
+            context_tokens=settings.context_tokens,
+        ),
+    }
 
 
 def _vision_runtime(

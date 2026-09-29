@@ -54,6 +54,18 @@ class ContextConfig(ConfigModel):
     max_tool_search_bytes: int
 
 
+class CorpusOcrConfig(ConfigModel):
+    """OCR de PDF escaneado (ADR 0018); desligado quando o bloco não vem no contrato."""
+
+    mode: Literal["enabled", "disabled"] = "disabled"
+    ollama_tag: str = ""
+    ollama_digest: str = ""
+    render_dpi: int = 150
+    max_output_tokens: int = 4096
+    context_tokens: int = 16384
+    taint: str = "OcrTranscribedTaint"
+
+
 class CorpusIngestionConfig(ConfigModel):
     accepted_extensions: tuple[str, ...]
     # Quem lê HTML na ingestão. `scrapling` limpa conteúdo oculto antes de extrair;
@@ -63,6 +75,7 @@ class CorpusIngestionConfig(ConfigModel):
     chunk_target_tokens: int
     chunk_overlap_tokens: int
     chunk_minimum_tokens: int
+    ocr: CorpusOcrConfig = CorpusOcrConfig()
 
 
 class CorpusRetrievalConfig(ConfigModel):
