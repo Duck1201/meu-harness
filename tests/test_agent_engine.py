@@ -36,6 +36,7 @@ from harness import (
     ToolSchema,
     load_config,
 )
+from harness.ports import ModelDurations, ModelUsage
 
 _CONTEXT = load_config().context
 
@@ -1696,3 +1697,44 @@ def test_tool_schema_snapshot_observes_grants_activated_and_revoked_between_step
         ]
 
     asyncio.run(scenario())
+
+
+def test_each_step_reports_how_fast_the_model_generated(tmp_path: Path) -> None:
+    async def scenario() -> list[Mapping[str, object]]:
+        store, conversation_id = await conversation_store(tmp_path)
+        measured = ModelResponse(
+            content="done",
+            usage=ModelUsage(input_tokens=1200, output_tokens=280),
+            durations=ModelDurations(
+                total_ns=6_000_000_000, prompt_eval_ns=1_500_000_000, eval_ns=5_000_000_000
+            ),
+        )
+        sink = FakeEventSink()
+        await engine(store, FakeRuntime([measured]), FakeToolExecutor(), sink).run(
+            conversation_id, "fast?"
+        )
+        return [
+            dict(event.payload)
+            for event in sink.events
+            if event.kind is AgentEventKind.GENERATION_STATS
+        ]
+
+    assert asyncio.run(scenario()) == [
+        {"output_tokens": 280, "eval_ms": 5000.0, "prompt_tokens": 1200, "prompt_eval_ms": 1500.0}
+    ]
+
+
+def test_a_runtime_that_does_not_time_generation_reports_no_speed(tmp_path: Path) -> None:
+    # Sem o tempo de geração não há denominador: nada é melhor que um número inventado.
+    async def scenario() -> int:
+        store, conversation_id = await conversation_store(tmp_path)
+        sink = FakeEventSink()
+        await engine(
+            store,
+            FakeRuntime([ModelResponse(content="done", usage=ModelUsage(10, 5))]),
+            FakeToolExecutor(),
+            sink,
+        ).run(conversation_id, "fast?")
+        return sum(event.kind is AgentEventKind.GENERATION_STATS for event in sink.events)
+
+    assert asyncio.run(scenario()) == 0

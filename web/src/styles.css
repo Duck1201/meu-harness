@@ -1464,6 +1464,27 @@ details[open] > summary .summary-chevron {
   line-height: 1.5;
 }
 
+.speed-meter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.speed-meter strong {
+  color: var(--ink, inherit);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-strip.last-speed {
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
 .composer-attachments {
   display: flex;
   flex-wrap: wrap;

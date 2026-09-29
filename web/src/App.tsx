@@ -47,6 +47,7 @@ import { harnessClient, type HarnessClient } from "./client";
 import { ConfirmationDialog } from "./components/ConfirmationDialog";
 import { PendingQueue } from "./components/PendingQueue";
 import { ContextGauge } from "./components/ContextGauge";
+import { SpeedMeter, tokensPerSecond } from "./components/SpeedMeter";
 import { RetrievalCard, passageAnchor } from "./components/RetrievalCard";
 import { ToolCallCard } from "./components/ToolCallCard";
 import type {
@@ -55,6 +56,7 @@ import type {
   ChatMessage,
   ChatSnapshot,
   ContextUsage,
+  GenerationSpeed,
   CorporaSnapshot,
   CorpusDocument,
   IngestionJob,
@@ -95,6 +97,7 @@ interface LiveRun {
   toolArguments: Record<string, string>;
   steps: number;
   contextUsage?: ContextUsage;
+  generationSpeed?: GenerationSpeed;
   outcome?: { kind: string; reasonCode: string };
   error?: string;
 }
@@ -563,6 +566,10 @@ function ChatArea({
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [liveRuns, setLiveRuns] = useState<Record<string, LiveRun>>({});
+  // A última velocidade medida em cada conversa: a mensagem ao vivo some quando
+  // o Turn termina, e o número que o Operator queria ver sumiria junto.
+  const [lastSpeed, setLastSpeed] = useState<Record<string, GenerationSpeed>>({});
+  const speedByRun = useRef<Record<string, GenerationSpeed>>({});
   const controllers = useRef(new Set<AbortController>());
   const snapshotRequest = useRef(0);
   // A conversa que o Operator escolheu, atualizada no clique e não quando o
@@ -704,6 +711,17 @@ function ChatArea({
     }));
 
     const onEvent = (event: AgUiEvent) => {
+      if (
+        event.type === "CUSTOM" &&
+        event.name === "harness.generation_stats" &&
+        isRecord(event.value)
+      ) {
+        const speed = readGenerationSpeed(event.value, speedByRun.current[runId]);
+        if (speed) {
+          speedByRun.current[runId] = speed;
+          setLastSpeed((current) => ({ ...current, [conversationId]: speed }));
+        }
+      }
       setLiveRuns((current) => {
         const run = current[runId];
         if (!run) return current;
@@ -814,13 +832,20 @@ function ChatArea({
     // O consumo da janela também segura a mensagem ao vivo: ele chega antes do
     // primeiro token, que é justamente quando saber quanto sobrou tem valor.
     .filter(
-      (run) => run.content || run.reasoning || run.tools.length || run.error || run.contextUsage,
+      (run) =>
+        run.content ||
+        run.reasoning ||
+        run.tools.length ||
+        run.error ||
+        run.contextUsage ||
+        run.generationSpeed,
     )
     .map(liveRunMessage);
   const streamingHere = runsHere.some(
     (run) => run.status === "queued" || run.status === "running",
   );
   const isRunning = snapshot.activeTurn !== null || streamingHere;
+  const speedHere = snapshot.conversationId ? lastSpeed[snapshot.conversationId] : undefined;
   // Turn ativo ou fila sem um stream desta aba para avisar do fim: aconteceu
   // depois de recarregar a página ou de trocar de conversa e voltar, e a UI
   // ficava mostrando "rodando" até o Operator recarregar de novo.
@@ -979,6 +1004,7 @@ function ChatArea({
                   <span>{runsHere.length} stream(s)</span>
                 </div>
               )}
+              {!isRunning && speedHere && <LastSpeedStrip speed={speedHere} />}
               {!snapshot.messages.length && !liveMessages.length && (
                 <div className="timeline-empty">
                   <MessageSquare size={21} />
@@ -1359,6 +1385,7 @@ function TimelineMessage({
           </details>
         )}
         {message.contextUsage && <ContextGauge usage={message.contextUsage} />}
+        {message.generationSpeed && <SpeedMeter speed={message.generationSpeed} />}
         {message.retrieval && <RetrievalCard retrieval={message.retrieval} />}
         {message.tools && message.tools.length > 0 && (
           <div className="tool-stack" aria-label="Chamadas de tools">
@@ -2768,6 +2795,10 @@ function reduceLiveRun(run: LiveRun, event: AgUiEvent): LiveRun {
         const usage = readContextUsage(event.value);
         return usage ? { ...run, contextUsage: usage } : run;
       }
+      if (event.name === "harness.generation_stats") {
+        const speed = readGenerationSpeed(event.value, run.generationSpeed);
+        return speed ? { ...run, generationSpeed: speed } : run;
+      }
       if (event.name !== "harness.turn_outcome") return run;
       const kind = event.value.outcome_kind;
       const reasonCode = event.value.reason_code;
@@ -2803,7 +2834,46 @@ function liveRunMessage(run: LiveRun): ChatMessage {
       : {}),
     ...(run.tools.length ? { tools: run.tools } : {}),
     ...(run.contextUsage ? { contextUsage: run.contextUsage } : {}),
+    ...(run.generationSpeed ? { generationSpeed: run.generationSpeed } : {}),
     ...(run.outcome ? { liveOutcome: run.outcome } : {}),
+  };
+}
+
+// Sem o tempo de geração não há velocidade: um evento incompleto não vira meia leitura.
+function LastSpeedStrip({ speed }: { speed: GenerationSpeed }) {
+  const turn = tokensPerSecond(speed.turnOutputTokens, speed.turnEvalMs);
+  return (
+    <div className="run-strip last-speed" role="status">
+      <span>
+        Última resposta: {turn === null ? "—" : turn.toFixed(1)} tok/s ·{" "}
+        {speed.turnOutputTokens} tokens em {(speed.turnEvalMs / 1000).toFixed(1)} s ·{" "}
+        {speed.steps} passo(s)
+      </span>
+    </div>
+  );
+}
+
+function readGenerationSpeed(
+  value: Record<string, unknown>,
+  previous: GenerationSpeed | undefined,
+): GenerationSpeed | undefined {
+  const outputTokens = value.output_tokens;
+  const evalMs = value.eval_ms;
+  const promptTokens = value.prompt_tokens;
+  const promptEvalMs = value.prompt_eval_ms;
+  if (typeof outputTokens !== "number" || typeof evalMs !== "number" || evalMs <= 0) {
+    return undefined;
+  }
+  return {
+    lastOutputTokens: outputTokens,
+    lastEvalMs: evalMs,
+    lastPromptTokens: typeof promptTokens === "number" ? promptTokens : 0,
+    ...(typeof promptEvalMs === "number" && promptEvalMs > 0
+      ? { lastPromptEvalMs: promptEvalMs }
+      : {}),
+    turnOutputTokens: (previous?.turnOutputTokens ?? 0) + outputTokens,
+    turnEvalMs: (previous?.turnEvalMs ?? 0) + evalMs,
+    steps: (previous?.steps ?? 0) + 1,
   };
 }
 

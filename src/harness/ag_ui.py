@@ -12,6 +12,16 @@ def project_agent_event(event: AgentEvent, *, run_id: str) -> list[dict[str, Jso
         return [{"type": "STEP_STARTED", "stepName": step_name}]
     if event.kind is AgentEventKind.STEP_FINISHED:
         return [{"type": "STEP_FINISHED", "stepName": step_name}]
+    if event.kind is AgentEventKind.GENERATION_STATS:
+        value: dict[str, JsonValue] = {
+            "output_tokens": _integer(event, "output_tokens"),
+            "eval_ms": _number(event, "eval_ms"),
+            "prompt_tokens": _integer(event, "prompt_tokens"),
+        }
+        prompt_eval_ms = event.payload.get("prompt_eval_ms")
+        if isinstance(prompt_eval_ms, int | float):
+            value["prompt_eval_ms"] = prompt_eval_ms
+        return [{"type": "CUSTOM", "name": "harness.generation_stats", "value": value}]
     if event.kind is AgentEventKind.CONTEXT_BUILT:
         dropped = event.payload.get("dropped_turn_ids")
         return [
@@ -159,6 +169,13 @@ def project_agent_event(event: AgentEvent, *, run_id: str) -> list[dict[str, Jso
             terminal,
         ]
     raise ValueError(f"unsupported agent event kind: {event.kind}")
+
+
+def _number(event: AgentEvent, key: str) -> float:
+    value = event.payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"agent event field must be a number: {key}")
+    return float(value)
 
 
 def run_started_event(*, conversation_id: str, run_id: str) -> dict[str, JsonValue]:

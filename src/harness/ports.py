@@ -78,6 +78,7 @@ class AgentEventKind(StrEnum):
     REASONING = "reasoning"
     STEP_STARTED = "step_started"
     CONTEXT_BUILT = "context_built"
+    GENERATION_STATS = "generation_stats"
     STEP_FINISHED = "step_finished"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"

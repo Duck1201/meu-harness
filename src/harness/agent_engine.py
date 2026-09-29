@@ -330,6 +330,7 @@ class AgentEngine:
             )
             try:
                 response = await self._runtime.generate(request)
+                await self._emit_generation_stats(turn, step_sequence, response)
                 _validate_response(response, self._response_markup)
             except MalformedModelResponseError as error:
                 rejected_count += 1
@@ -822,6 +823,35 @@ class AgentEngine:
                 turn_id=turn.id,
                 step_sequence=step_sequence,
                 payload={"content": response.reasoning},
+                conversation_id=turn.conversation_id,
+                request_id=turn.request_id,
+            )
+        )
+
+    async def _emit_generation_stats(
+        self, turn: Turn, step_sequence: int, response: ModelResponse
+    ) -> None:
+        """Quantos tokens o passo gerou e em quanto tempo: o medidor de tok/s da UI.
+
+        Só contagens e tempos, como toda telemetria. Um runtime que não mede um
+        dos dois não emite nada: velocidade sem denominador seria número inventado.
+        """
+        usage, durations = response.usage, response.durations
+        if usage is None or durations is None or not durations.eval_ns:
+            return
+        payload: dict[str, JsonValue] = {
+            "output_tokens": usage.output_tokens,
+            "eval_ms": round(durations.eval_ns / 1_000_000, 1),
+            "prompt_tokens": usage.input_tokens,
+        }
+        if durations.prompt_eval_ns:
+            payload["prompt_eval_ms"] = round(durations.prompt_eval_ns / 1_000_000, 1)
+        await self._emit(
+            AgentEvent(
+                kind=AgentEventKind.GENERATION_STATS,
+                turn_id=turn.id,
+                step_sequence=step_sequence,
+                payload=payload,
                 conversation_id=turn.conversation_id,
                 request_id=turn.request_id,
             )

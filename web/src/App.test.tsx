@@ -451,6 +451,37 @@ describe("App", () => {
     confirm.mockRestore();
   });
 
+  it("mede tokens por segundo durante o turno e guarda a última medição", async () => {
+    const user = userEvent.setup();
+    const client = new MockHarnessClient();
+    let finish: () => void = () => undefined;
+    vi.spyOn(client, "streamAgent").mockImplementation(async (input, onEvent) => {
+      onEvent({ type: "RUN_STARTED", threadId: input.threadId, runId: input.runId! });
+      onEvent({
+        type: "CUSTOM",
+        name: "harness.generation_stats",
+        value: { output_tokens: 280, eval_ms: 5000, prompt_tokens: 1200, prompt_eval_ms: 1500 },
+      });
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId! };
+    });
+    render(<App client={client} />);
+
+    await screen.findByRole("heading", { name: "Refinar retenção por conversa" });
+    await user.type(screen.getByLabelText("Solicitação para o Harness"), "rápido?");
+    await user.click(screen.getByRole("button", { name: "Enviar solicitação" }));
+
+    const meter = await screen.findByRole("status", { name: "Velocidade de geração" });
+    // 280 tokens em 5 s são 56 tok/s; o prompt, 1200 em 1,5 s, 800 tok/s.
+    expect(meter).toHaveTextContent("56.0 tok/s");
+    expect(meter).toHaveTextContent("prompt 800 tok/s");
+
+    finish();
+    expect(await screen.findByText(/Última resposta: 56\.0 tok\/s/)).toBeInTheDocument();
+  });
+
   it("mostra o consumo da janela de contexto enquanto o turno roda", async () => {
     const user = userEvent.setup();
     const client = new MockHarnessClient();

@@ -260,6 +260,22 @@ export interface ContextUsage {
   droppedTurns: number;
 }
 
+/**
+ * Quão rápido o modelo gerou: o passo mais recente e a soma do turno.
+ *
+ * Chega por `CUSTOM`/`harness.generation_stats`, um evento por passo, com
+ * contagens e tempos medidos pelo runtime — nunca estimados na UI.
+ */
+export interface GenerationSpeed {
+  lastOutputTokens: number;
+  lastEvalMs: number;
+  lastPromptTokens: number;
+  lastPromptEvalMs?: number;
+  turnOutputTokens: number;
+  turnEvalMs: number;
+  steps: number;
+}
+
 export interface ChatMessage {
   id: string;
   turnId: string;
@@ -270,6 +286,7 @@ export interface ChatMessage {
   tools?: ToolCall[];
   retrieval?: Retrieval;
   contextUsage?: ContextUsage;
+  generationSpeed?: GenerationSpeed;
   events?: TimelineEvent[];
   metrics?: Record<string, string | number>;
   terminalOutcome?: TerminalOutcome;

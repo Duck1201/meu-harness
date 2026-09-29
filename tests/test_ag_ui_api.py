@@ -368,3 +368,25 @@ def test_terminal_outcome_custom_event_precedes_exactly_one_ag_ui_terminal(
     Draft202012Validator(EVENT_SCHEMAS[terminal_type]).validate(  # pyright: ignore[reportUnknownMemberType]
         projected[1]
     )
+
+
+def test_generation_stats_become_the_custom_event_the_speed_meter_reads() -> None:
+    projected = project_agent_event(
+        AgentEvent(
+            kind=AgentEventKind.GENERATION_STATS,
+            turn_id="turn-1",
+            step_sequence=2,
+            payload={"output_tokens": 280, "eval_ms": 5000.0, "prompt_tokens": 1200},
+            conversation_id="thread-1",
+            request_id="internal-request-1",
+        ),
+        run_id="run-1",
+    )
+
+    assert projected == [
+        {
+            "type": "CUSTOM",
+            "name": "harness.generation_stats",
+            "value": {"output_tokens": 280, "eval_ms": 5000.0, "prompt_tokens": 1200},
+        }
+    ]

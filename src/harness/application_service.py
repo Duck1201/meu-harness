@@ -1402,6 +1402,10 @@ class _ServiceEventSink:
             "context_window",
             "output_budget",
             "dropped_turn_ids",
+            "output_tokens",
+            "eval_ms",
+            "prompt_tokens",
+            "prompt_eval_ms",
         ):
             value = event.payload.get(key)
             if value is not None:
