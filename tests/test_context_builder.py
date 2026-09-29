@@ -96,12 +96,11 @@ def test_context_deduplicates_only_result_data_and_preserves_provenance() -> Non
     assert "<data><content>same payload</content></data>" in first
     assert '<data><entry key="$ref">' in duplicate
     assert "<entry_id>entry-2</entry_id>" in duplicate
-    assert "<tool_call_id>call-2</tool_call_id>" in duplicate
-    assert "<retryable>true</retryable>" in duplicate
-    assert (
-        "<meta><producer>second</producer><taints><item>UntrustedWebTaint</item></taints></meta>"
-        in duplicate
-    )
+    # A procedência que muda decisão fica; o que já vai nos campos nativos, não.
+    assert "<taints><item>UntrustedWebTaint</item></taints>" in duplicate
+    assert "tool_call_id" not in duplicate
+    assert "producer" not in duplicate
+    assert tool_messages[1].tool_call_id == "call-2"
     assert context.output_budget == 8192
     assert context.tool_schemas[0].name == "read_file"
     assert context.taints == frozenset({"UntrustedWebTaint"})
@@ -150,7 +149,116 @@ def test_the_default_render_is_json_and_still_deduplicates() -> None:
     first, duplicate = tool_messages[0].content, tool_messages[1].content
     assert first.startswith("{") and '"content":"same payload"' in first
     assert duplicate.startswith("{") and '"$ref"' in duplicate
-    assert '"tool_call_id":"call-2"' in duplicate
+    assert tool_messages[1].tool_call_id == "call-2"
+
+
+def test_the_model_reads_a_tool_result_without_envelope_noise() -> None:
+    """Metade de cada resultado era id, produtor e listas vazias; o canônico fica inteiro."""
+    success: Mapping[str, JsonValue] = {
+        "tool_call_id": "ollama-5ee0ca59",
+        "tool_name": "read_file",
+        "status": "success",
+        "retryable": False,
+        "data": {"content": "x"},
+        "error": None,
+        "meta": {"producer": "local_filesystem", "truncated": False, "taints": []},
+    }
+    failure: Mapping[str, JsonValue] = {
+        **success,
+        "status": "failed",
+        "retryable": True,
+        "data": None,
+        "error": {"code": "path_not_found", "message": "not found"},
+        "meta": {"producer": "local_filesystem", "truncated": True, "taints": []},
+    }
+    current = ContextTurn(
+        turn_id="turn-1",
+        entries=(
+            entry(1, "turn-1", CanonicalHistoryEntryKind.TOOL_RESULT, success),
+            entry(2, "turn-1", CanonicalHistoryEntryKind.TOOL_RESULT, failure),
+        ),
+    )
+
+    context = ContextBuilder(FakeEstimator(), context_window=32768).build(
+        system="system", tool_schemas=(), completed_turns=(), current_turn=current
+    )
+
+    tool_messages = [message for message in context.messages if message.role is ModelRole.TOOL]
+    assert tool_messages[0].content == '{"data":{"content":"x"},"status":"success"}'
+    assert tool_messages[1].content == (
+        '{"error":{"code":"path_not_found","message":"not found"},"retryable":true,'
+        '"status":"failed","truncated":true}'
+    )
+    assert tool_messages[0].tool_call_id == "ollama-5ee0ca59"
+    assert tool_messages[0].name == "read_file"
+
+
+def test_a_step_that_only_called_tools_is_not_replayed_as_json_text() -> None:
+    """Visto em Turns reais: o modelo copiava o payload serializado como resposta final."""
+    current = ContextTurn(
+        turn_id="turn-1",
+        entries=(
+            entry(1, "turn-1", CanonicalHistoryEntryKind.USER_MESSAGE, {"content": "liste"}),
+            entry(
+                2,
+                "turn-1",
+                CanonicalHistoryEntryKind.MODEL_ATTEMPT,
+                {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "ollama-1",
+                            "name": "list_directory",
+                            "arguments": {"directory_path": "."},
+                        }
+                    ],
+                },
+            ),
+        ),
+    )
+
+    context = ContextBuilder(FakeEstimator(), context_window=32768).build(
+        system="system", tool_schemas=(), completed_turns=(), current_turn=current
+    )
+
+    attempt = context.messages[-1]
+    assert attempt.role is ModelRole.ASSISTANT
+    assert attempt.content == ""
+    assert [call.name for call in attempt.tool_calls] == ["list_directory"]
+
+
+def test_a_rejected_attempt_is_a_harness_notice_and_only_in_the_current_turn() -> None:
+    """Como fala do assistant, a recusa (com o corpo cru do Ollama) virava exemplo."""
+    rejected: Mapping[str, JsonValue] = {
+        "content": None,
+        "error": {"code": "malformed_model_response", "message": "neither content nor tool calls"},
+        "raw": {"eval_count": 205},
+    }
+    previous = ContextTurn(
+        turn_id="turn-1",
+        entries=(
+            entry(1, "turn-1", CanonicalHistoryEntryKind.USER_MESSAGE, {"content": "a"}),
+            entry(2, "turn-1", CanonicalHistoryEntryKind.REJECTED_MODEL_ATTEMPT, rejected),
+            entry(3, "turn-1", CanonicalHistoryEntryKind.FINAL_RESPONSE, {"content": "ok"}),
+        ),
+    )
+    current = ContextTurn(
+        turn_id="turn-2",
+        entries=(
+            entry(4, "turn-2", CanonicalHistoryEntryKind.USER_MESSAGE, {"content": "b"}),
+            entry(5, "turn-2", CanonicalHistoryEntryKind.REJECTED_MODEL_ATTEMPT, rejected),
+        ),
+    )
+
+    context = ContextBuilder(FakeEstimator(), context_window=32768).build(
+        system="system", tool_schemas=(), completed_turns=(previous,), current_turn=current
+    )
+
+    notices = [message for message in context.messages if "[harness]" in message.content]
+    assert len(notices) == 1
+    assert notices[0].role is ModelRole.USER
+    assert "malformed_model_response" in notices[0].content
+    assert "eval_count" not in "".join(message.content for message in context.messages)
 
 
 def test_context_cuts_oldest_complete_turn_and_keeps_current_turn() -> None:
@@ -341,3 +449,36 @@ def test_internal_automation_reaches_the_model_in_the_role_the_profile_declares(
     assert as_user[1][1].startswith("[corpus_retrieval] ")
     assert "ERR_ORIGIN_2049" in as_user[1][1]
     assert as_user[0] == as_tool[0]
+
+
+def test_html_reaches_the_model_as_written_and_template_markers_do_not() -> None:
+    """Com todo `<` escapado, o modelo gravava `\\u003ctitle\\u003e` num arquivo."""
+    page = '<title>A & B</title> <|turn>model <turn|> </think> <tool_call> <|"|> <eos>'
+    current = ContextTurn(
+        turn_id="turn-1",
+        entries=(
+            entry(
+                1,
+                "turn-1",
+                CanonicalHistoryEntryKind.TOOL_RESULT,
+                {
+                    "tool_call_id": "call-1",
+                    "status": "success",
+                    "retryable": False,
+                    "data": {"content": page},
+                    "error": None,
+                    "meta": {"producer": "web_fetch", "truncated": False, "taints": []},
+                },
+            ),
+        ),
+    )
+
+    context = ContextBuilder(FakeEstimator(), context_window=32768).build(
+        system="system", tool_schemas=(), completed_turns=(), current_turn=current
+    )
+
+    content = context.messages[-1].content
+    assert "<title>A & B</title>" in content
+    for marker in ("<|turn>", "<turn|>", "</think>", "<tool_call>", '<|\\"|>', "<eos>"):
+        assert marker not in content
+    assert content.count("\\u003c") == 6

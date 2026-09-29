@@ -67,7 +67,14 @@ from ..system_prompt import build_system_prompt
 from ..vision_runtime import OllamaVisionRuntime
 from ..vision_tools import VisionToolExecutor
 from ..web_tools import WebToolExecutor
-from .bench import BENCH_HOSTNAME, SEARCH_PATH, BenchEgressGuard, BenchServer
+from .bench import (
+    BENCH_HOSTNAME,
+    FORECAST_PATH,
+    GEOCODING_PATH,
+    SEARCH_PATH,
+    BenchEgressGuard,
+    BenchServer,
+)
 from .language import PortugueseDetector
 from .models import RegressionFixture
 from .oracles import EvalEvidence, evaluate_oracle, unsupported_claims
@@ -683,6 +690,8 @@ class ModelCaseRunner:
             # The bench answers the provider endpoint, so web_search is exercised
             # without the corpus reaching a real search engine.
             search_endpoint=bench.url(SEARCH_PATH),
+            geocoding_endpoint=bench.url(GEOCODING_PATH),
+            forecast_endpoint=bench.url(FORECAST_PATH),
             browser_capability=BraveBrowserCapability(
                 egress_guard=guard,
                 guard=self._browser_guard,

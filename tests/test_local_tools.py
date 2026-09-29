@@ -1,8 +1,8 @@
 import asyncio
-import hashlib
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 from harness import (
     Grant,
@@ -12,10 +12,17 @@ from harness import (
     ToolResult,
     load_config,
 )
+from harness.domain import JsonValue
 
 # Os tetos de bytes vêm do contrato, não de um número solto aqui: um teste que
 # lê um teto diferente do de produção mede outro executor.
 _CONTEXT = load_config().context
+
+
+def _matched_paths(result: ToolResult) -> list[str]:
+    assert isinstance(result.data, Mapping)
+    matches = cast(list[Mapping[str, JsonValue]], result.data["matches"])
+    return [str(match["path"]) for match in matches]
 
 
 def executor_for(
@@ -73,7 +80,7 @@ def test_preflight_rejects_absolute_and_parent_traversal_paths(tmp_path: Path) -
     asyncio.run(scenario())
 
 
-def test_read_file_returns_exact_line_page_and_content_digest(tmp_path: Path) -> None:
+def test_read_file_returns_exact_line_page_and_total_lines(tmp_path: Path) -> None:
     async def scenario() -> None:
         content = "zero\num\ndois\n"
         (tmp_path / "notes.txt").write_text(content, encoding="utf-8")
@@ -92,7 +99,7 @@ def test_read_file_returns_exact_line_page_and_content_digest(tmp_path: Path) ->
         assert result.data == {
             "file_path": "notes.txt",
             "content": "um\n",
-            "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+            "total_lines": 3,
             "offset": 1,
             "line_count": 1,
             "next_offset": 2,
@@ -137,7 +144,6 @@ def test_preview_shows_what_the_mutation_would_change(tmp_path: Path) -> None:
     async def scenario() -> None:
         executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
         (tmp_path / "notes.md").write_bytes(b"first\nsecond\n")
-        digest = hashlib.sha256(b"first\nsecond\n").hexdigest()
 
         created = await executor.preview(
             ToolCall(
@@ -154,11 +160,7 @@ def test_preview_shows_what_the_mutation_would_change(tmp_path: Path) -> None:
             ToolCall(
                 id="replace",
                 name="write_file",
-                arguments={
-                    "file_path": "notes.md",
-                    "content": "first\nthird\n",
-                    "expected_current_sha256": digest,
-                },
+                arguments={"file_path": "notes.md", "content": "first\nthird\n"},
             )
         )
         assert replaced is not None
@@ -172,16 +174,26 @@ def test_preview_shows_what_the_mutation_would_change(tmp_path: Path) -> None:
                 name="edit",
                 arguments={
                     "file_path": "notes.md",
-                    "start_line": 2,
-                    "end_line": 2,
-                    "replacement": "changed\n",
-                    "expected_current_sha256": digest,
+                    "old_string": "second",
+                    "new_string": "changed",
                 },
             )
         )
         assert edited is not None
         assert edited.kind == "edit"
         assert "+changed" in edited.diff
+
+        # An edit that would fail has nothing honest to preview.
+        assert (
+            await executor.preview(
+                ToolCall(
+                    id="absent",
+                    name="edit",
+                    arguments={"file_path": "notes.md", "old_string": "zzz", "new_string": "y"},
+                )
+            )
+            is None
+        )
 
         # Previewing is not writing.
         assert (tmp_path / "notes.md").read_bytes() == b"first\nsecond\n"
@@ -210,36 +222,19 @@ def test_preview_shows_what_the_mutation_would_change(tmp_path: Path) -> None:
 
 def test_empty_optional_argument_is_read_as_absent(tmp_path: Path) -> None:
     async def scenario() -> None:
+        (tmp_path / "a.py").write_text("TODO one\n", encoding="utf-8")
+        (tmp_path / "b.md").write_text("TODO two\n", encoding="utf-8")
         executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
-        # The runtime fills every property in the schema, this one included.
-        create = ToolCall(
-            id="write",
-            name="write_file",
-            arguments={
-                "file_path": "notes.md",
-                "content": "first\n",
-                "expected_current_sha256": "",
-            },
+        # The runtime fills every property in the schema, this one included: an
+        # empty include is no filter, not a filter that matches nothing.
+        search = ToolCall(
+            id="grep",
+            name="grep_search",
+            arguments={"pattern": "TODO", "include": ""},
         )
 
-        assert (await executor.preflight((create,))).allowed is True
-        assert (await executor.execute(create)).status.value == "success"
-        assert (tmp_path / "notes.md").read_bytes() == b"first\n"
-
-        # Absent is absent: replacing the file it just created still needs the digest.
-        replace_call = ToolCall(
-            id="replace",
-            name="write_file",
-            arguments={
-                "file_path": "notes.md",
-                "content": "second\n",
-                "expected_current_sha256": "",
-            },
-        )
-        batch = await executor.preflight((replace_call,))
-        assert batch.allowed is False
-        assert batch.reason_code == "expected_sha256_required"
-        assert (tmp_path / "notes.md").read_bytes() == b"first\n"
+        assert (await executor.preflight((search,))).allowed is True
+        assert _matched_paths(await executor.execute(search)) == ["a.py", "b.md"]
 
         # An empty required argument is a value: an empty file is a real request.
         empty_file = ToolCall(
@@ -266,12 +261,10 @@ def test_write_file_atomically_creates_internal_parents(tmp_path: Path) -> None:
         assert (await executor.preflight((call,))).allowed is True
         result = await executor.execute(call)
 
-        digest = hashlib.sha256(b"new content\n").hexdigest()
         assert result.status.value == "success"
         assert result.data == {
             "file_path": "nested/deep/file.txt",
-            "before_sha256": None,
-            "after_sha256": digest,
+            "created": True,
             "changed": True,
             "created_directories": ["nested", "nested/deep"],
         }
@@ -287,64 +280,101 @@ def test_write_file_atomically_creates_internal_parents(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-def test_edit_preserves_bytes_outside_inclusive_line_range(tmp_path: Path) -> None:
-    async def scenario() -> None:
-        before = b"alpha\r\n  beta  \r\ngamma\nomega"
-        expected_after = b"alpha\r\n replacement \ngamma\nomega"
-        (tmp_path / "mixed.txt").write_bytes(before)
+def _edit(tmp_path: Path, before: bytes, **arguments: JsonValue) -> tuple[ToolResult, bytes]:
+    async def scenario() -> ToolResult:
+        (tmp_path / "target.txt").write_bytes(before)
         executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
-        call = ToolCall(
-            id="edit",
-            name="edit",
-            arguments={
-                "file_path": "mixed.txt",
-                "start_line": 2,
-                "end_line": 2,
-                "replacement": " replacement \n",
-                "expected_current_sha256": hashlib.sha256(before).hexdigest(),
-            },
-        )
-
+        call = ToolCall(id="edit", name="edit", arguments={"file_path": "target.txt", **arguments})
         assert (await executor.preflight((call,))).allowed is True
-        result = await executor.execute(call)
+        return await executor.execute(call)
 
-        assert result.status.value == "success"
-        assert result.data == {
-            "file_path": "mixed.txt",
-            "before_sha256": hashlib.sha256(before).hexdigest(),
-            "after_sha256": hashlib.sha256(expected_after).hexdigest(),
-            "changed": True,
-            "created_directories": [],
-        }
-        assert (tmp_path / "mixed.txt").read_bytes() == expected_after
+    result = asyncio.run(scenario())
+    return result, (tmp_path / "target.txt").read_bytes()
+
+
+def test_edit_replaces_exact_text_and_preserves_every_other_byte(tmp_path: Path) -> None:
+    result, after = _edit(
+        tmp_path,
+        b"alpha\r\n  beta  \r\ngamma\nomega",
+        old_string="  beta  ",
+        new_string=" replacement ",
+    )
+
+    assert result.status.value == "success"
+    assert after == b"alpha\r\n replacement \r\ngamma\nomega"
+    assert isinstance(result.data, Mapping)
+    assert result.data["changed"] is True
+    assert result.data["replacements"] == 1
+
+
+def test_edit_shows_the_model_the_region_it_wrote(tmp_path: Path) -> None:
+    # Without it the model had no way to see a broken edit and reported success.
+    before = "".join(f"line {number}\n" for number in range(1, 11)).encode()
+    result, _ = _edit(tmp_path, before, old_string="line 5\n", new_string="LINE FIVE\n")
+
+    assert isinstance(result.data, Mapping)
+    assert result.data["excerpt"] == {
+        "start_line": 3,
+        "text": "line 3\nline 4\nLINE FIVE\nline 6\nline 7",
+    }
+
+
+def test_edit_that_misses_says_where_the_text_parted_from_the_file(tmp_path: Path) -> None:
+    result, after = _edit(
+        tmp_path,
+        b"function run() {\n  return 1;\n}\n",
+        old_string="function run() {\n    return 1;",
+        new_string="function run() {\n  return 2;",
+    )
+
+    assert result.status.value == "failed"
+    assert result.retryable is True
+    assert result.error is not None
+    assert result.error["code"] == "old_string_not_found"
+    assert "line 1" in str(result.error["message"])
+    assert after == b"function run() {\n  return 1;\n}\n"
+
+
+def test_edit_refuses_an_ambiguous_match_unless_asked_to_replace_all(tmp_path: Path) -> None:
+    before = b"name = 'Seu Nome'\ntitle = 'Seu Nome'\n"
+    ambiguous, unchanged = _edit(tmp_path, before, old_string="Seu Nome", new_string="Miguel")
+    everywhere, replaced = _edit(
+        tmp_path, before, old_string="Seu Nome", new_string="Miguel", replace_all=True
+    )
+
+    assert ambiguous.status.value == "failed"
+    assert ambiguous.error is not None
+    assert ambiguous.error["code"] == "old_string_not_unique"
+    assert "lines 1, 2" in str(ambiguous.error["message"])
+    assert unchanged == before
+    assert everywhere.status.value == "success"
+    assert isinstance(everywhere.data, Mapping)
+    assert everywhere.data["replacements"] == 2
+    assert replaced == b"name = 'Miguel'\ntitle = 'Miguel'\n"
+
+
+def test_edit_with_identical_strings_is_refused_before_it_runs(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        (tmp_path / "a.txt").write_text("x\n", encoding="utf-8")
+        executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
+        batch = await executor.preflight(
+            (
+                ToolCall(
+                    id="same",
+                    name="edit",
+                    arguments={"file_path": "a.txt", "old_string": "x", "new_string": "x"},
+                ),
+            )
+        )
+        assert batch.allowed is False
+        assert batch.reason_code == "invalid_tool_arguments"
 
     asyncio.run(scenario())
 
 
 _APP_JS = b"function run(ok, value) {\n  if (ok) {\n    return value;\n  }\n}\n"
 _TABBED_APP_JS = b"function run(ok, value) {\n\tif (ok) {\n\t  return value;\n\t}\n}\n"
-
-
-def _edit_app_js(tmp_path: Path, replacement: str) -> tuple[ToolResult, bytes]:
-    async def scenario() -> ToolResult:
-        (tmp_path / "app.js").write_bytes(_APP_JS)
-        executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
-        return await executor.execute(
-            ToolCall(
-                id="edit",
-                name="edit",
-                arguments={
-                    "file_path": "app.js",
-                    "start_line": 2,
-                    "end_line": 4,
-                    "replacement": replacement,
-                    "expected_current_sha256": hashlib.sha256(_APP_JS).hexdigest(),
-                },
-            )
-        )
-
-    result = asyncio.run(scenario())
-    return result, (tmp_path / "app.js").read_bytes()
+_APP_BODY = "  if (ok) {\n    return value;\n  }\n"
 
 
 def test_edit_keeps_the_line_break_the_replacement_left_out(tmp_path: Path) -> None:
@@ -355,43 +385,56 @@ def test_edit_keeps_the_line_break_the_replacement_left_out(tmp_path: Path) -> N
     at the end of the file dropping it is a real edit — so there is no line the
     model could have meant to weld on.
     """
-    result, after = _edit_app_js(tmp_path, "\tif (ok) {\n\t  return value;\n\t}")
+    result, after = _edit(
+        tmp_path, _APP_JS, old_string=_APP_BODY, new_string="\tif (ok) {\n\t  return value;\n\t}"
+    )
 
     assert result.status.value == "success"
     assert after == _TABBED_APP_JS
 
 
 def test_edit_keeps_a_crlf_break_the_replacement_left_out(tmp_path: Path) -> None:
-    async def scenario() -> ToolResult:
-        before = b"alpha\r\nbeta\r\ngamma\r\n"
-        (tmp_path / "crlf.txt").write_bytes(before)
-        executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
-        return await executor.execute(
-            ToolCall(
-                id="edit",
-                name="edit",
-                arguments={
-                    "file_path": "crlf.txt",
-                    "start_line": 2,
-                    "end_line": 2,
-                    "replacement": "BETA",
-                    "expected_current_sha256": hashlib.sha256(before).hexdigest(),
-                },
-            )
-        )
+    result, after = _edit(
+        tmp_path, b"alpha\r\nbeta\r\ngamma\r\n", old_string="beta\r\n", new_string="BETA"
+    )
 
-    assert asyncio.run(scenario()).status.value == "success"
-    assert (tmp_path / "crlf.txt").read_bytes() == b"alpha\r\nBETA\r\ngamma\r\n"
+    assert result.status.value == "success"
+    assert after == b"alpha\r\nBETA\r\ngamma\r\n"
+
+
+def test_edit_deleting_lines_does_not_leave_a_blank_one(tmp_path: Path) -> None:
+    result, after = _edit(tmp_path, b"keep\ndrop\nkeep\n", old_string="drop\n", new_string="")
+
+    assert result.status.value == "success"
+    assert after == b"keep\nkeep\n"
 
 
 def test_edit_decodes_a_block_the_model_escaped_twice(tmp_path: Path) -> None:
     """Observed in 3 of 6 Gemma 4 seeds: backslash-t and backslash-n as text.
 
     The model reads the file as escaped JSON and writes the escapes back. A
-    multi-line range replaced by one line whose only breaks are escapes is that
-    mistake, not a line that holds a string literal.
+    multi-line old_string replaced by one line whose only breaks are escapes is
+    that mistake, not a line that holds a string literal.
     """
-    result, after = _edit_app_js(tmp_path, "\\tif (ok) {\\n\\t  return value;\\n\\t}")
+    result, after = _edit(
+        tmp_path,
+        _APP_JS,
+        old_string=_APP_BODY,
+        new_string="\\tif (ok) {\\n\\t  return value;\\n\\t}",
+    )
+
+    assert result.status.value == "success"
+    assert after == _TABBED_APP_JS
+
+
+def test_edit_finds_an_old_string_the_model_escaped_twice(tmp_path: Path) -> None:
+    # Both halves escaped: old_string only matches the file once decoded.
+    result, after = _edit(
+        tmp_path,
+        _APP_JS,
+        old_string="  if (ok) {\\n    return value;\\n  }\\n",
+        new_string="\\tif (ok) {\\n\\t  return value;\\n\\t}\\n",
+    )
 
     assert result.status.value == "success"
     assert after == _TABBED_APP_JS
@@ -409,10 +452,8 @@ def test_the_preview_shows_the_repaired_block_the_edit_will_write(tmp_path: Path
                 name="edit",
                 arguments={
                     "file_path": "app.js",
-                    "start_line": 2,
-                    "end_line": 4,
-                    "replacement": "\\tif (ok) {\\n\\t  return value;\\n\\t}",
-                    "expected_current_sha256": hashlib.sha256(_APP_JS).hexdigest(),
+                    "old_string": _APP_BODY,
+                    "new_string": "\\tif (ok) {\\n\\t  return value;\\n\\t}",
                 },
             )
         )
@@ -428,53 +469,23 @@ def test_the_preview_shows_the_repaired_block_the_edit_will_write(tmp_path: Path
 
 def test_edit_keeps_escapes_that_belong_to_the_code(tmp_path: Path) -> None:
     # One line replacing one line: an escape there is the code's own string literal.
-    async def scenario() -> ToolResult:
-        before = b"a = 1\nprint(a)\nz = 2\n"
-        (tmp_path / "s.py").write_bytes(before)
-        executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
-        return await executor.execute(
-            ToolCall(
-                id="edit",
-                name="edit",
-                arguments={
-                    "file_path": "s.py",
-                    "start_line": 2,
-                    "end_line": 2,
-                    "replacement": 'print("a\\tb\\n")\n',
-                    "expected_current_sha256": hashlib.sha256(before).hexdigest(),
-                },
-            )
-        )
+    result, after = _edit(
+        tmp_path,
+        b"a = 1\nprint(a)\nz = 2\n",
+        old_string="print(a)",
+        new_string='print("a\\tb\\n")',
+    )
 
-    assert asyncio.run(scenario()).status.value == "success"
-    assert (tmp_path / "s.py").read_bytes() == b'a = 1\nprint("a\\tb\\n")\nz = 2\n'
+    assert result.status.value == "success"
+    assert after == b'a = 1\nprint("a\\tb\\n")\nz = 2\n'
 
 
 def test_edit_of_the_last_line_may_drop_the_final_newline(tmp_path: Path) -> None:
-    async def scenario() -> None:
-        before = b"alpha\nomega\n"
-        (tmp_path / "tail.txt").write_bytes(before)
-        executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
+    # Nothing follows the last line, so there is no line to weld and the edit stands.
+    result, after = _edit(tmp_path, b"alpha\nomega\n", old_string="omega\n", new_string="omega")
 
-        result = await executor.execute(
-            ToolCall(
-                id="edit",
-                name="edit",
-                arguments={
-                    "file_path": "tail.txt",
-                    "start_line": 2,
-                    "end_line": 2,
-                    "replacement": "omega",
-                    "expected_current_sha256": hashlib.sha256(before).hexdigest(),
-                },
-            )
-        )
-
-        # Nothing follows the last line, so there is no line to weld and the edit stands.
-        assert result.status.value == "success"
-        assert (tmp_path / "tail.txt").read_bytes() == b"alpha\nomega"
-
-    asyncio.run(scenario())
+    assert result.status.value == "success"
+    assert after == b"alpha\nomega"
 
 
 def test_duplicate_edit_reconciles_postcondition_without_reapplying(tmp_path: Path) -> None:
@@ -486,13 +497,7 @@ def test_duplicate_edit_reconciles_postcondition_without_reapplying(tmp_path: Pa
         call = ToolCall(
             id="edit-once",
             name="edit",
-            arguments={
-                "file_path": "lines.txt",
-                "start_line": 2,
-                "end_line": 2,
-                "replacement": "changed\n",
-                "expected_current_sha256": hashlib.sha256(before).hexdigest(),
-            },
+            arguments={"file_path": "lines.txt", "old_string": "two", "new_string": "changed"},
             idempotency_key="stable-edit",
         )
 
@@ -713,11 +718,7 @@ def test_read_symlink_must_resolve_inside_workspace_and_mutations_reject_symlink
                 ToolCall(
                     id="symlink-write",
                     name="write_file",
-                    arguments={
-                        "file_path": "inside-link",
-                        "content": "changed",
-                        "expected_current_sha256": hashlib.sha256(b"inside").hexdigest(),
-                    },
+                    arguments={"file_path": "inside-link", "content": "changed"},
                 ),
             )
         )
@@ -906,58 +907,32 @@ def test_expired_session_grants_are_not_effective(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-def test_write_file_rejects_stale_sha_and_detects_byte_noop(tmp_path: Path) -> None:
+def test_write_file_replaces_without_a_digest_and_detects_byte_noop(tmp_path: Path) -> None:
     async def scenario() -> None:
         path = tmp_path / "existing.txt"
         path.write_bytes(b"same\n")
         path.chmod(0o640)
         executor = executor_for(tmp_path, "WorkspaceRootGrant", "WriteGrant")
-        stale = ToolCall(
-            id="stale",
-            name="write_file",
-            arguments={
-                "file_path": "existing.txt",
-                "content": "different\n",
-                "expected_current_sha256": "0" * 64,
-            },
-        )
 
-        stale_result = await executor.execute(stale)
-        digest = hashlib.sha256(b"same\n").hexdigest()
         noop_result = await executor.execute(
             ToolCall(
                 id="noop",
                 name="write_file",
-                arguments={
-                    "file_path": "existing.txt",
-                    "content": "same\n",
-                    "expected_current_sha256": digest,
-                },
+                arguments={"file_path": "existing.txt", "content": "same\n"},
             )
         )
-        replace_result = await executor.execute(
-            ToolCall(
-                id="replace",
-                name="write_file",
-                arguments={
-                    "file_path": "existing.txt",
-                    "content": "replaced\n",
-                    "expected_current_sha256": digest,
-                },
-            )
+        replace_call = ToolCall(
+            id="replace",
+            name="write_file",
+            arguments={"file_path": "existing.txt", "content": "replaced\n"},
         )
+        assert (await executor.preflight((replace_call,))).allowed is True
+        replace_result = await executor.execute(replace_call)
 
-        assert stale_result.status.value == "failed"
-        assert stale_result.retryable is True
-        assert stale_result.error == {
-            "code": "content_conflict",
-            "message": "The current file digest does not match expected_current_sha256.",
-        }
         assert noop_result.status.value == "success"
         assert noop_result.data == {
             "file_path": "existing.txt",
-            "before_sha256": digest,
-            "after_sha256": digest,
+            "created": False,
             "changed": False,
             "created_directories": [],
         }
@@ -984,11 +959,7 @@ def test_workspace_reads_are_never_cached_after_write(tmp_path: Path) -> None:
             ToolCall(
                 id="write-fresh",
                 name="write_file",
-                arguments={
-                    "file_path": "fresh.txt",
-                    "content": "after\n",
-                    "expected_current_sha256": hashlib.sha256(b"before\n").hexdigest(),
-                },
+                arguments={"file_path": "fresh.txt", "content": "after\n"},
             )
         )
         after = await executor.execute(read_call)
@@ -1026,6 +997,75 @@ def test_not_found_and_invalid_utf8_are_failed_without_host_paths(tmp_path: Path
         assert invalid.error is not None and invalid.error["code"] == "invalid_utf8"
         assert str(tmp_path) not in str(missing.error)
         assert str(tmp_path) not in str(invalid.error)
+
+    asyncio.run(scenario())
+
+
+def test_not_found_names_the_real_paths_the_model_almost_typed(tmp_path: Path) -> None:
+    # A real Turn: "vibe-coder/nota-fiscal" for "Vibe coder/nota.avif", three
+    # guesses, and the Turn ended without the file.
+    async def scenario() -> None:
+        (tmp_path / "Vibe coder").mkdir()
+        (tmp_path / "Vibe coder" / "nota.avif").write_bytes(b"\x00")
+        (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+        executor = executor_for(tmp_path, "WorkspaceRootGrant")
+
+        file_guess = await executor.execute(
+            ToolCall(id="f", name="read_file", arguments={"file_path": "vibe-coder/nota-fiscal"})
+        )
+        directory_guess = await executor.execute(
+            ToolCall(id="d", name="list_directory", arguments={"directory_path": "vibe coder"})
+        )
+        secret_guess = await executor.execute(
+            ToolCall(id="s", name="read_file", arguments={"file_path": "env"})
+        )
+
+        assert file_guess.error is not None
+        assert "Vibe coder/nota.avif" in str(file_guess.error["message"])
+        assert directory_guess.error is not None
+        assert "Vibe coder" in str(directory_guess.error["message"])
+        # A denied path is never offered as a suggestion.
+        assert secret_guess.error is not None
+        assert ".env" not in str(secret_guess.error["message"])
+
+    asyncio.run(scenario())
+
+
+def test_reading_an_image_points_to_describe_image(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        (tmp_path / "print.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff")
+        executor = executor_for(tmp_path, "WorkspaceRootGrant")
+        result = await executor.execute(
+            ToolCall(id="img", name="read_file", arguments={"file_path": "print.png"})
+        )
+
+        assert result.error is not None
+        assert result.error["code"] == "invalid_utf8"
+        assert "describe_image" in str(result.error["message"])
+
+    asyncio.run(scenario())
+
+
+def test_grep_search_filters_by_file_pattern_and_can_ignore_case(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("Token = 1\n", encoding="utf-8")
+        (tmp_path / "notes.md").write_text("token here\n", encoding="utf-8")
+        executor = executor_for(tmp_path, "WorkspaceRootGrant")
+
+        async def paths(**arguments: JsonValue) -> list[str]:
+            return _matched_paths(
+                await executor.execute(
+                    ToolCall(
+                        id="g", name="grep_search", arguments={"pattern": "token", **arguments}
+                    )
+                )
+            )
+
+        assert await paths() == ["notes.md"]
+        assert await paths(ignore_case=True) == ["notes.md", "src/app.py"]
+        assert await paths(ignore_case=True, include="*.py") == ["src/app.py"]
+        assert await paths(ignore_case=True, include="src/**/*.py") == ["src/app.py"]
 
     asyncio.run(scenario())
 

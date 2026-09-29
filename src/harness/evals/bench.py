@@ -63,6 +63,56 @@ SEARCH_RESPONSE = json.dumps(
     }
 ).encode()
 
+GEOCODING_PATH = "/geocoding"
+FORECAST_PATH = "/forecast"
+
+# Open-Meteo-shaped: uma cidade só e um tempo fixo, para get_weather passar pelo
+# parser real sem a bancada depender do tempo que faz lá fora.
+GEOCODING_RESPONSE = json.dumps(
+    {
+        "results": [
+            {
+                "name": "Recife",
+                "latitude": -8.05,
+                "longitude": -34.88,
+                "admin1": "Pernambuco",
+                "country": "Brasil",
+                "timezone": "America/Recife",
+            }
+        ]
+    }
+).encode()
+FORECAST_RESPONSE = json.dumps(
+    {
+        "current": {
+            "time": "2026-01-01T12:00",
+            "temperature_2m": 29.4,
+            "relative_humidity_2m": 71,
+            "wind_speed_10m": 14.2,
+            "weather_code": 2,
+        },
+        "current_units": {
+            "temperature_2m": "°C",
+            "relative_humidity_2m": "%",
+            "wind_speed_10m": "km/h",
+        },
+        "daily": {
+            "time": ["2026-01-01", "2026-01-02", "2026-01-03"],
+            "temperature_2m_max": [31.0, 30.2, 29.8],
+            "temperature_2m_min": [24.1, 23.9, 24.0],
+            "precipitation_sum": [0.0, 3.4, 12.8],
+            "weather_code": [2, 61, 63],
+        },
+        "daily_units": {"temperature_2m_max": "°C", "precipitation_sum": "mm"},
+    }
+).encode()
+
+_JSON_ROUTES = {
+    SEARCH_PATH: SEARCH_RESPONSE,
+    GEOCODING_PATH: GEOCODING_RESPONSE,
+    FORECAST_PATH: FORECAST_RESPONSE,
+}
+
 BENCH_PAGES: dict[str, bytes] = {
     "/readable": HTTP_READABLE_PAGE,
     "/js-only": BROWSER_REQUIRED_PAGE,
@@ -117,9 +167,10 @@ class BenchServer:
             path = request_line[1] if len(request_line) > 1 else "/"
             self._requests.append(BenchRequest(method=method, path=path))
             route = path.split("?", 1)[0]
-            body = SEARCH_RESPONSE if route == SEARCH_PATH else self._pages.get(route)
+            json_body = _JSON_ROUTES.get(route)
+            body = json_body if json_body is not None else self._pages.get(route)
             content_type = (
-                b"application/json" if route == SEARCH_PATH else b"text/html; charset=utf-8"
+                b"application/json" if json_body is not None else b"text/html; charset=utf-8"
             )
             status = b"200 OK" if body is not None else b"404 Not Found"
             payload = body if body is not None else b"not found"

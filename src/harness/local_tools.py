@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from hashlib import sha256
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from jsonschema import Draft202012Validator
@@ -196,6 +196,58 @@ class RegistryToolExecutor:
         meta["replayed"] = True
         return replace(entry.result, tool_call_id=call.id, meta=meta)
 
+    def _not_found_message(self, relative_path: str, kind: str) -> str:
+        """Not found, plus the nearest real paths: the model's guess is usually close.
+
+        Observed in real Turns: "vibe-coder/nota-fiscal" for "Vibe coder/nota.avif".
+        A bare "not found" left the model guessing a third name, and the guard
+        against repeated lookups then ended the Turn with nothing found.
+        """
+        candidates = self._workspace_paths(directories=kind == "directory")
+        wanted = relative_path.strip("/").lower()
+        by_lower = {candidate.lower(): candidate for candidate in candidates}
+        close = difflib.get_close_matches(wanted, list(by_lower), n=3, cutoff=0.5)
+        name = wanted.rsplit("/", 1)[-1]
+        stem = name.split(".", 1)[0]
+        named = [
+            candidate
+            for lowered, candidate in by_lower.items()
+            if stem and stem in lowered.rsplit("/", 1)[-1]
+        ]
+        suggestions = list(dict.fromkeys([*(by_lower[item] for item in close), *named]))[:5]
+        message = f"The requested {kind} was not found: {relative_path}."
+        if len(suggestions) == 1:
+            return f"{message} It exists as {suggestions[0]}: use exactly that path."
+        if suggestions:
+            return f"{message} Similar paths that do exist: {', '.join(suggestions)}."
+        return f"{message} Use glob with a pattern such as **/*{stem or name}* to search by name."
+
+    def _workspace_paths(self, *, directories: bool) -> list[str]:
+        """Readable paths under the root, bounded, for not-found suggestions only."""
+        found: list[str] = []
+        for current, dirnames, filenames in os.walk(self._workspace_root, followlinks=False):
+            base = Path(current).relative_to(self._workspace_root).parts
+            dirnames.sort()
+            for name in dirnames if directories else filenames:
+                logical = (*base, name)
+                try:
+                    self._validate_policy_path(logical)
+                    self._validate_read_path(logical)
+                except _PreflightIssue:
+                    continue
+                found.append("/".join(logical))
+                if len(found) >= _SUGGESTION_SCAN_LIMIT:
+                    return found
+            kept: list[str] = []
+            for name in dirnames:
+                try:
+                    self._validate_policy_path((*base, name))
+                except _PreflightIssue:
+                    continue
+                kept.append(name)
+            dirnames[:] = kept
+        return found
+
     def _read_file(self, call: ToolCall) -> ToolResult:
         relative_path = _string_argument(call, "file_path")
         parts = _relative_parts(relative_path, allow_dot=False)
@@ -215,7 +267,7 @@ class RegistryToolExecutor:
                 call,
                 ToolResultStatus.FAILED,
                 "path_not_found",
-                "The requested file was not found.",
+                self._not_found_message(relative_path, "file"),
                 retryable=False,
             )
         except PermissionError:
@@ -249,7 +301,7 @@ class RegistryToolExecutor:
                 call,
                 ToolResultStatus.FAILED,
                 "invalid_utf8",
-                "The requested file is not valid UTF-8 text.",
+                _binary_file_message(relative_path),
                 retryable=False,
             )
 
@@ -278,7 +330,7 @@ class RegistryToolExecutor:
         data = {
             "file_path": relative_path,
             "content": content,
-            "content_sha256": sha256(content_bytes).hexdigest(),
+            "total_lines": len(lines),
             "offset": offset,
             "line_count": consumed_lines,
             "next_offset": next_offset,
@@ -335,7 +387,7 @@ class RegistryToolExecutor:
                 call,
                 ToolResultStatus.FAILED,
                 "path_not_found",
-                "The requested directory was not found.",
+                self._not_found_message(relative_path, "directory"),
                 retryable=False,
             )
         except PermissionError:
@@ -501,7 +553,15 @@ class RegistryToolExecutor:
         relative_path = _string_argument(call, "directory_path", default=".")
         pattern = _string_argument(call, "pattern")
         is_regex = cast(bool, call.arguments.get("is_regex", False))
-        expression = re.compile(pattern) if is_regex else None
+        ignore_case = cast(bool, call.arguments.get("ignore_case", False))
+        include = cast(str | None, call.arguments.get("include"))
+        expression = (
+            re.compile(
+                pattern if is_regex else re.escape(pattern), re.IGNORECASE if ignore_case else 0
+            )
+            if is_regex or ignore_case
+            else None
+        )
         parts = _relative_parts(relative_path, allow_dot=True)
         offset = cast(int, call.arguments.get("offset", 0))
         limit = cast(int, call.arguments.get("limit", 200))
@@ -540,6 +600,8 @@ class RegistryToolExecutor:
 
                 for name in sorted(file_names):
                     logical_parts = (*parts, *current_parts, name)
+                    if include is not None and not _included(include, (*current_parts, name)):
+                        continue
                     try:
                         self._validate_policy_path(logical_parts)
                         self._validate_read_path(logical_parts)
@@ -642,7 +704,6 @@ class RegistryToolExecutor:
     def _write_file(self, call: ToolCall) -> ToolResult:
         relative_path = _string_argument(call, "file_path")
         content = _string_argument(call, "content").encode("utf-8")
-        expected = call.arguments.get("expected_current_sha256")
         parts = _relative_parts(relative_path, allow_dot=False)
         path = self._workspace_root.joinpath(*parts)
         try:
@@ -658,24 +719,6 @@ class RegistryToolExecutor:
                 )
             before = path.read_bytes() if exists else None
             before_sha = sha256(before).hexdigest() if before is not None else None
-            if exists and expected is None:
-                return _error_result(
-                    call,
-                    ToolResultStatus.BLOCKED,
-                    "expected_sha256_required",
-                    "Replacing a file requires expected_current_sha256.",
-                    retryable=False,
-                    mutation=True,
-                )
-            if expected is not None and expected != before_sha:
-                return _error_result(
-                    call,
-                    ToolResultStatus.FAILED,
-                    "content_conflict",
-                    "The current file digest does not match expected_current_sha256.",
-                    retryable=True,
-                    mutation=True,
-                )
             after_sha = sha256(content).hexdigest()
             if before == content:
                 return self._mutation_result(
@@ -727,10 +770,6 @@ class RegistryToolExecutor:
 
     def _edit(self, call: ToolCall) -> ToolResult:
         relative_path = _string_argument(call, "file_path")
-        replacement = _string_argument(call, "replacement").encode("utf-8")
-        expected = _string_argument(call, "expected_current_sha256")
-        start_line = cast(int, call.arguments["start_line"])
-        end_line = cast(int, call.arguments["end_line"])
         parts = _relative_parts(relative_path, allow_dot=False)
         path = self._workspace_root.joinpath(*parts)
         try:
@@ -739,7 +778,7 @@ class RegistryToolExecutor:
                     call,
                     ToolResultStatus.FAILED,
                     "path_not_found",
-                    "The requested file was not found.",
+                    self._not_found_message(relative_path, "file"),
                     retryable=False,
                     mutation=True,
                 )
@@ -754,56 +793,46 @@ class RegistryToolExecutor:
                 )
             before = path.read_bytes()
             try:
-                before.decode("utf-8")
+                edited = _replaced_text(
+                    before.decode("utf-8"),
+                    _string_argument(call, "old_string"),
+                    _string_argument(call, "new_string"),
+                    replace_all=bool(call.arguments.get("replace_all", False)),
+                )
             except UnicodeDecodeError:
                 return _error_result(
                     call,
                     ToolResultStatus.FAILED,
                     "invalid_utf8",
-                    "The requested file is not valid UTF-8 text.",
+                    "The file is not UTF-8 text, so it cannot be edited as text.",
                     retryable=False,
                     mutation=True,
                 )
-            before_sha = sha256(before).hexdigest()
-            if expected != before_sha:
+            except _EditIssue as issue:
                 return _error_result(
                     call,
                     ToolResultStatus.FAILED,
-                    "content_conflict",
-                    "The current file digest does not match expected_current_sha256.",
+                    issue.code,
+                    issue.detail,
                     retryable=True,
                     mutation=True,
                 )
-            lines = before.splitlines(keepends=True)
-            if start_line > len(lines) or end_line > len(lines):
-                return _error_result(
-                    call,
-                    ToolResultStatus.FAILED,
-                    "line_range_out_of_bounds",
-                    "The requested line range is outside the file.",
-                    retryable=False,
-                    mutation=True,
-                )
-            after = _edited_bytes(before, lines, start_line, end_line, replacement)
-            after_sha = sha256(after).hexdigest()
-            if after == before:
-                return self._mutation_result(
-                    call,
-                    relative_path=relative_path,
-                    before_sha=before_sha,
-                    after_sha=after_sha,
-                    changed=False,
-                    created_directories=[],
-                )
-            mode = stat.S_IMODE(path.stat(follow_symlinks=False).st_mode)
-            _atomic_replace(path, after, mode=mode)
-            return self._mutation_result(
-                call,
-                relative_path=relative_path,
-                before_sha=before_sha,
-                after_sha=after_sha,
-                changed=True,
-                created_directories=[],
+            after = edited.text.encode("utf-8")
+            if after != before:
+                mode = stat.S_IMODE(path.stat(follow_symlinks=False).st_mode)
+                _atomic_replace(path, after, mode=mode)
+            return ToolResult(
+                tool_call_id=call.id,
+                status=ToolResultStatus.SUCCESS,
+                retryable=False,
+                data={
+                    "file_path": relative_path,
+                    "changed": after != before,
+                    "replacements": edited.count,
+                    "excerpt": _excerpt_around(edited.text, edited.first_offset, edited.length),
+                },
+                error=None,
+                meta=_meta(truncated=False, mutation=True),
             )
         except PermissionError:
             return _error_result(
@@ -855,8 +884,7 @@ class RegistryToolExecutor:
             retryable=False,
             data={
                 "file_path": relative_path,
-                "before_sha256": before_sha,
-                "after_sha256": after_sha,
+                "created": before_sha is None,
                 "changed": changed,
                 "created_directories": created_directories,
             },
@@ -910,13 +938,16 @@ class RegistryToolExecutor:
     def _previewed_bytes(self, call: ToolCall, before: bytes) -> bytes | None:
         if call.name == "write_file":
             return _string_argument(call, "content").encode("utf-8")
-        lines = before.splitlines(keepends=True)
-        start_line = cast(int, call.arguments["start_line"])
-        end_line = cast(int, call.arguments["end_line"])
-        if start_line > len(lines) or end_line > len(lines):
+        try:
+            edited = _replaced_text(
+                before.decode("utf-8"),
+                _string_argument(call, "old_string"),
+                _string_argument(call, "new_string"),
+                replace_all=bool(call.arguments.get("replace_all", False)),
+            )
+        except _EditIssue:
             return None
-        replacement = _string_argument(call, "replacement").encode("utf-8")
-        return _edited_bytes(before, lines, start_line, end_line, replacement)
+        return edited.text.encode("utf-8")
 
     def _normalized(self, call: ToolCall) -> ToolCall:
         definition = self._registry.get(call.name)
@@ -956,23 +987,12 @@ class RegistryToolExecutor:
                 _grant_detail(missing_grants[0]),
             )
         self._validate_call_paths(call)
-        if (
-            call.name == "write_file"
-            and not allow_known_replay
-            and self._workspace_root.joinpath(
-                *_relative_parts(_string_argument(call, "file_path"), allow_dot=False)
-            ).exists()
-            and "expected_current_sha256" not in call.arguments
+        if call.name == "edit" and call.arguments.get("old_string") == call.arguments.get(
+            "new_string"
         ):
             raise _PreflightIssue(
-                "expected_sha256_required",
-                "Replacing a file requires expected_current_sha256.",
-            )
-        if call.name == "edit" and cast(int, call.arguments["end_line"]) < cast(
-            int, call.arguments["start_line"]
-        ):
-            raise _PreflightIssue(
-                "invalid_tool_arguments", "end_line must be greater than or equal to start_line."
+                "invalid_tool_arguments",
+                "new_string is identical to old_string: nothing to change.",
             )
         if call.name == "grep_search" and call.arguments.get("is_regex", False):
             try:
@@ -1112,64 +1132,137 @@ def _unified_diff(before: str, after: str, path: str) -> tuple[str, bool]:
     return "".join(lines).rstrip("\n"), truncated
 
 
-def _edited_bytes(
-    before: bytes, lines: list[bytes], start_line: int, end_line: int, replacement: bytes
-) -> bytes:
+_ESCAPED = re.compile(r'\\([ntr"\\])')
+_UNESCAPED = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}
+
+
+class _EditIssue(Exception):
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+
+
+@dataclass(frozen=True, slots=True)
+class _EditedText:
+    text: str
+    count: int
+    first_offset: int
+    length: int
+
+
+def _unescaped(value: str) -> str:
+    return _ESCAPED.sub(lambda match: _UNESCAPED[match.group(1)], value)
+
+
+def _escaped_block(value: str) -> bool:
+    """A block that arrived as escaped JSON: backslash-n text and no real break."""
+    return "\\n" in value and "\n" not in value and "\r" not in value
+
+
+def _replaced_text(
+    text: str, old_string: str, new_string: str, *, replace_all: bool
+) -> _EditedText:
     """The file after an edit, computed once for the preview and for the write.
 
     The Operator approves the preview, so it has to show the repaired block the
-    executor will write, not the raw one the model sent.
+    executor will write, not the raw one the model sent. Two repairs, both seen
+    in Gemma 4 seeds, and both unable to undo a real edit:
+
+    - The file reaches the model as escaped JSON and it writes the escapes back,
+      so a multi-line block lands as one line of backslash-n text. When old_string
+      only matches after decoding, both strings are decoded; new_string alone is
+      decoded when it replaces several lines with none. A single line holding a
+      string literal such as "a\\n" never matches either shape.
+    - A block that replaced whole lines arrives without its final break, and the
+      next line would be welded onto it. Not at the end of the file, where
+      dropping the break is a real edit, and not when new_string is empty,
+      which deletes the lines.
     """
-    start_offset = sum(len(line) for line in lines[: start_line - 1])
-    end_offset = sum(len(line) for line in lines[:end_line])
-    removed = before[start_offset:end_offset]
-    replacement = _undo_double_escape(removed, replacement)
-    if _drops_trailing_newline(removed, replacement, before[end_offset:]):
-        # Observed in 5 of 6 Gemma 4 seeds: the block arrives without its final
-        # break, and the next line would be welded onto the last replaced one.
-        # This used to be a refusal naming the fix; it cost the Turn its second
-        # call, and the model then told the Operator the edit had gone through.
-        # The check never fires on the last line, where dropping the break is a
-        # real edit, so restoring it cannot undo anything the model meant.
-        replacement += _line_break_of(removed)
-    return before[:start_offset] + replacement + before[end_offset:]
+    old, new = old_string, new_string
+    count = text.count(old)
+    if count == 0 and _escaped_block(old) and text.count(_unescaped(old)):
+        old = _unescaped(old)
+        count = text.count(old)
+        if _escaped_block(new):
+            new = _unescaped(new)
+    elif old.count("\n") >= 2 and _escaped_block(new):
+        new = _unescaped(new)
+    if count == 0:
+        raise _EditIssue("old_string_not_found", _not_found_detail(text, old))
+    if count > 1 and not replace_all:
+        lines = [
+            text.count("\n", 0, match.start()) + 1 for match in re.finditer(re.escape(old), text)
+        ]
+        listed = ", ".join(str(line) for line in lines[:10])
+        raise _EditIssue(
+            "old_string_not_unique",
+            f"old_string appears {count} times (lines {listed}). Include more of the "
+            "surrounding lines so it matches exactly once, or set replace_all to true.",
+        )
+    first = text.index(old)
+    if (
+        new
+        and old.endswith(("\n", "\r"))
+        and not new.endswith(("\n", "\r"))
+        and first + len(old) < len(text)
+    ):
+        new += "\r\n" if old.endswith("\r\n") else old[-1]
+    after = text.replace(old, new) if replace_all else text.replace(old, new, 1)
+    return _EditedText(
+        text=after, count=count if replace_all else 1, first_offset=first, length=len(new)
+    )
 
 
-def _line_break_of(removed: bytes) -> bytes:
-    """The break the replaced range ended with, so a CRLF file stays CRLF."""
-    return b"\r\n" if removed.endswith(b"\r\n") else removed[-1:]
+def _not_found_detail(text: str, old: str) -> str:
+    """Where the model's memory of the file parted from the file, when it can tell."""
+    first_line = next((line.strip() for line in old.splitlines() if line.strip()), "")
+    if first_line:
+        for number, line in enumerate(text.splitlines(), start=1):
+            if first_line in line:
+                return (
+                    f"old_string does not appear in the file as written. Its first line matches "
+                    f"line {number}, so the lines after it, the indentation or the line breaks "
+                    "differ. Copy the text exactly as read_file returned it."
+                )
+    return (
+        "old_string does not appear in the file. It must match the current text exactly, "
+        "including indentation and line breaks: read_file the file and copy the text from it."
+    )
 
 
-_ESCAPED = re.compile(rb'\\([ntr"\\])')
-_UNESCAPED = {b"n": b"\n", b"t": b"\t", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
+_EXCERPT_CONTEXT_LINES = 2
+_SUGGESTION_SCAN_LIMIT = 5000
+_EXCERPT_MAX_LINES = 20
 
 
-def _undo_double_escape(removed: bytes, replacement: bytes) -> bytes:
-    """Decodes a block the model escaped twice, and leaves anything else alone.
-
-    Observed in 3 of 6 Gemma 4 seeds: the file reaches the model as escaped JSON
-    and it writes the escapes back, so the tabs and breaks land as backslash-t
-    and backslash-n text on one line. The tell is shape: a range of two or more
-    lines replaced by a block with no real break but escaped ones. A single line
-    holding a string literal such as "a\\n" never matches, because it does not
-    replace several lines.
-    """
-    if removed.count(b"\n") < 2 or b"\n" in replacement or b"\r" in replacement:
-        return replacement
-    if b"\\n" not in replacement:
-        return replacement
-    return _ESCAPED.sub(lambda match: _UNESCAPED[match.group(1)], replacement)
+_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif", ".bmp", ".heic"})
 
 
-def _drops_trailing_newline(removed: bytes, replacement: bytes, following: bytes) -> bool:
-    """True when the edit would weld the next line onto the last replaced one.
+def _included(include: str, parts: tuple[str, ...]) -> bool:
+    """A pattern without a slash names files at any depth, as *.py does in grep tools."""
+    if "/" not in include:
+        return PurePosixPath(parts[-1]).full_match(include)
+    return PurePosixPath(*parts).full_match(include)
 
-    Nothing follows the last line of a file, so dropping the final break there is
-    a legitimate edit and not a weld.
-    """
-    if not following or not removed.endswith((b"\n", b"\r")):
-        return False
-    return not replacement.endswith((b"\n", b"\r"))
+
+def _binary_file_message(relative_path: str) -> str:
+    if Path(relative_path).suffix.lower() in _IMAGE_SUFFIXES:
+        return (
+            "This is an image, not text, so read_file cannot read it. describe_image "
+            "answers a question about a PNG, JPEG or WebP image."
+        )
+    return "The file is not UTF-8 text, so read_file cannot read it."
+
+
+def _excerpt_around(text: str, offset: int, length: int) -> Mapping[str, Any]:
+    """The edited region with a little context, so the model sees what it wrote."""
+    lines = text.splitlines()
+    first = text.count("\n", 0, offset)
+    last = text.count("\n", 0, offset + max(length - 1, 0))
+    start = max(first - _EXCERPT_CONTEXT_LINES, 0)
+    end = min(last + _EXCERPT_CONTEXT_LINES + 1, len(lines), start + _EXCERPT_MAX_LINES)
+    return {"start_line": start + 1, "text": "\n".join(lines[start:end])}
 
 
 class _ExpressionError(Exception):

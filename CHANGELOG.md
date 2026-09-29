@@ -6,6 +6,26 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ### Alterado
 
+- **Tools refeitas a partir das conversas reais do Operator.** No `model_smoke` do
+  Gemma 4 E4B QAT (34 fixtures × 3 sementes), o código novo fez 101/102 contra
+  94/102 do anterior. Os ganhos vieram das fixtures tiradas de Turns reais:
+  trocar um nome no `index.html` (0/3 → 3/3) e achar um arquivo por um caminho
+  aproximado (0/3 → 3/3).
+  - `edit` troca um trecho exato (`old_string`/`new_string`, `replace_all`) em vez
+    de um intervalo de linhas com SHA-256. Falha dizendo onde o texto divergiu ou
+    em que linhas ele se repete, e devolve o trecho editado.
+  - `write_file` substitui sem SHA; `read_file` informa `total_lines`; "não
+    encontrado" sugere os caminhos reais parecidos; ler uma imagem aponta para o
+    `describe_image`; `grep_search` ganhou `ignore_case` e `include`;
+    `get_weather` traduz o código WMO em `conditions`. Descrições reescritas.
+  - A ModelView parou de ensinar formato errado: passo só de tool calls não vira
+    mais JSON no conteúdo; tentativa rejeitada vira aviso do harness, e não fala
+    do modelo com o corpo cru do Ollama; o resultado vai sem id, produtor e listas
+    vazias (eram 52% dos caracteres); e só marcadores de template são escapados,
+    não todo `<`, que fazia o modelo gravar `<` em HTML.
+  - O system prompt diz quando agir ("nunca responda que vai fazer") e não trata
+    mais "a busca achou o arquivo" como "não mexa nele".
+
 - **Perfil funcional: Gemma 4 E4B QAT.** Venceu o `mitos` (Qwen3.5-4B abliterated)
   pelo protocolo de promoção: 41/50 contra 33/50, zero violações, 7,4 s contra
   12,1 s por caso e nenhuma resposta malformada. É o primeiro perfil a passar a
@@ -22,6 +42,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ### Adicionado
 
+- **Anexar imagem no chat.** Botão ou Ctrl+V no campo de mensagem grava a imagem
+  em `anexos/` no Workspace e manda o caminho para o modelo chamar o
+  `describe_image`. Só PNG, JPEG e WebP, conferidos pelos bytes.
+- **Seis fixtures de modelo** tiradas de falhas reais e das tools que nenhuma
+  fixture exercitava (`calculate`, `get_weather`, `list_directory`), e a bancada
+  responde a Open-Meteo, para o `get_weather` ser medido sem internet.
 - **Bancada de modelos.** Braços de experimento que nomeiam um RuntimeProfile
   (Challenger) rodam nele; o `ProfileRuntimeSwitch` troca o modelo na placa entre
   braços. Treze candidatos medidos e registrados em `evals/experiments.json`.

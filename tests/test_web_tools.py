@@ -767,7 +767,11 @@ def test_get_weather_resolves_the_place_then_reads_the_forecast() -> None:
             {
                 "current": {"temperature_2m": 29.4, "weather_code": 2},
                 "current_units": {"temperature_2m": "°C"},
-                "daily": {"time": ["2026-08-12"], "temperature_2m_max": [31.0]},
+                "daily": {
+                    "time": ["2026-08-12", "2026-08-13"],
+                    "temperature_2m_max": [31.0, 30.0],
+                    "weather_code": [63, 99999],
+                },
                 "daily_units": {"temperature_2m_max": "°C"},
             }
         ).encode()
@@ -802,6 +806,12 @@ def test_get_weather_resolves_the_place_then_reads_the_forecast() -> None:
         assert isinstance(place, Mapping)
         assert place["latitude"] == -8.05
         assert place["country"] == "Brazil"
+        # O código WMO ao lado do texto: o modelo lia "3" como chuva forte.
+        current = result.data["current"]
+        daily = result.data["daily"]
+        assert isinstance(current, Mapping) and isinstance(daily, Mapping)
+        assert current["conditions"] == "partly cloudy"
+        assert daily["conditions"] == ["moderate rain", "unknown"]
         assert result.meta["taints"] == ["UntrustedWebTaint"]
         assert result.meta["producer"] == "open_meteo"
         assert len(transport.requests) == 2

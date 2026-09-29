@@ -373,7 +373,9 @@ cada chamada como `waived`, nunca como `approved`
 
 As tools expostas: `read_file`, `write_file`, `edit`, `list_directory`, `glob`,
 `grep_search`, `web_search`, `web_fetch`, `corpus_search`, `calculate`,
-`get_weather` e, com a visão ligada, `describe_image`.
+`get_weather` e, com a visão ligada, `describe_image`. O `edit` troca um trecho
+exato (`old_string` por `new_string`, com `replace_all` para todas as ocorrências)
+e devolve o trecho editado; nem ele nem o `write_file` pedem SHA-256.
 
 ### Visão: `describe_image`
 
@@ -392,6 +394,12 @@ uv run python scripts/vision-bench.py --cases <pasta>  # mede nos seus prints (c
 ```
 
 Para desligar, use `"mode": "disabled"` em `config/harness.json#vision`.
+
+Para testar pelo chat, anexe a imagem no campo de mensagem (botão **imagem**, ou
+cole com Ctrl+V). Ela é gravada em `anexos/` no Workspace da Conversation
+(`POST /api/conversations/{id}/attachments`, só PNG, JPEG e WebP, conferidos pelos
+bytes, até `vision.max_image_bytes`), e a mensagem leva o caminho para o modelo
+chamar o `describe_image`.
 
 ### RAG: acervos por Corpus
 

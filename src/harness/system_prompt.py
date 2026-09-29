@@ -19,29 +19,38 @@ from pathlib import Path
 
 from .config import HarnessConfig
 
+# Nas conversas reais do Operator o Gemma respondia "vou atualizar o arquivo" e
+# encerrava o turno sem tool call, e o Operator tinha de pedir "chama a tool" de
+# novo. O prompt antigo só dizia quando não chamar; esta linha diz quando chamar.
 _BASE = (
-    "Use the available tools when needed. All workspace paths supplied to tools "
-    "must be relative to the workspace root."
+    "You act only through tools. When the Operator asks you to create, change, fetch, "
+    "look up, calculate or read something, call the tool in this step: never reply that "
+    "you will do it, and never say a file changed unless a tool changed it in this turn. "
+    "Answer without a tool only when the request needs no action and no data you lack. "
+    "All workspace paths supplied to tools must be relative to the workspace root."
 )
 
 # A tool result is the answer, not a claim to be checked. Re-reading what a
 # previous result already reported is the single most common way a Turn spends
-# its budget without learning anything.
+# its budget without learning anything. A versão anterior terminava em "não leia
+# os arquivos que a busca achou", e o Gemma, pedido para trocar um nome, achou as
+# linhas com grep_search e respondeu que o Operator tinha proibido editá-las.
 _RESULT_AUTHORITY = (
     "A tool result is authoritative. Do not call another tool to confirm what a "
     "result in this turn already reported: if a search listed the files, that is "
     "the list; if an edit reported success, the file changed. In particular, "
-    "after glob or grep_search, do not read the files they named unless the "
-    "request is about their contents."
+    "after glob or grep_search, do not read the files they named just to confirm "
+    "the search; do read or edit them when the request needs their content or a "
+    "change to them."
 )
 
-# write_file says replacing a file needs its SHA-256, and the model reads that as
-# "find the file first". Asked to create one, it burned ten steps on read_file and
-# glob for a path that never existed. The registry already answers this in
-# model_tools[write_file].executor_invariants; the prompt just has to say it.
+# Criar um arquivo é uma chamada só: o modelo lia "precisa do SHA" como "ache o
+# arquivo antes" e gastava dez passos procurando um caminho que nunca existiu. O
+# SHA saiu do write_file e do edit; a ordem ler-depois-editar é o que sobra dizer.
 _MUTATION_DIRECTNESS = (
-    "Creating a file is a single write_file call: a path that does not exist yet "
-    "takes no expected_current_sha256 and nothing has to be read or located first. "
+    "Creating or completely rewriting a file is a single write_file call: nothing has to "
+    "be read or located first. To change part of an existing file, read_file it, then "
+    "call edit with old_string copied exactly from what read_file returned. "
     "Once a tool reports a path is absent, treat it as absent — do not call the "
     "same tool again with different arguments to look for it."
 )

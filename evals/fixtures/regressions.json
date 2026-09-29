@@ -2,7 +2,7 @@
   "schema_version": 2,
   "dataset_id": "harness_2_contract_regressions",
   "dataset_version": "3.2.0",
-  "dataset_digest_sha256": "d7adc41046a561bfee8b53df2bdf5e616db78d682d5e3004836f73de88ddc9b9",
+  "dataset_digest_sha256": "bf3fecdc6c49653913239a8b8bc7421b3a91e0094db9c9dfc392196a352cb245",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -497,7 +497,7 @@
         ],
         "explanation": [
           "the transport is not parsed here: Ollama delivers structured tool calls, so this measures the model plus its runtime, end to end",
-          "edit requires expected_current_sha256, so one read_file before the edit is inside the budget",
+          "edit copies old_string from the file, so one read_file before the edit is inside the budget",
           "tabs, the two-space continuation and the final newline have to survive byte-for-byte"
         ]
       }
@@ -1071,6 +1071,334 @@
           "the chat model cannot see; the only honest way to the number is describe_image on the file the Operator named",
           "48213 is an integer so the check has no decimal-separator ambiguity; digit-level misreading is what evals/vision measures",
           "without the vision tool offered this fixture fails by design, which is what the vision_off arm of vision_tool_enablement shows"
+        ]
+      }
+    },
+    {
+      "id": "edit_replaces_a_name_the_operator_asked_to_change",
+      "type": "model_task",
+      "tags": [
+        "tool_selection",
+        "edit",
+        "act_not_announce",
+        "language_pt"
+      ],
+      "origin": "Turn real do Operator (24/09/2026): o modelo anunciou a troca de 'Seu Nome' e encerrou o turno sem tool call, e depois falhou no edit por SHA",
+      "stimulus": {
+        "user_request": "Troque Seu Nome por Miguel em todos os lugares do arquivo index.html.",
+        "workspace": [
+          {
+            "path": "index.html",
+            "content": "<!DOCTYPE html>\n<html lang=\"pt-BR\">\n<head>\n  <meta charset=\"UTF-8\">\n  <title>Seu Nome | Portfólio</title>\n  <link rel=\"stylesheet\" href=\"style.css\">\n</head>\n<body>\n  <header>\n    <h1>Seu Nome</h1>\n    <p>Desenvolvedor web</p>\n  </header>\n  <footer>&copy; 2026</footer>\n</body>\n</html>\n"
+          }
+        ]
+      },
+      "oracle": {
+        "must_call": [
+          "edit"
+        ],
+        "must_not_call": [],
+        "max_tool_calls": 4,
+        "typed_assertions": [
+          {
+            "operator": "tool_called",
+            "tool": "edit"
+          },
+          {
+            "operator": "max_tool_calls",
+            "maximum": 4
+          },
+          {
+            "operator": "file_content_equals",
+            "path": "index.html",
+            "content": "<!DOCTYPE html>\n<html lang=\"pt-BR\">\n<head>\n  <meta charset=\"UTF-8\">\n  <title>Miguel | Portfólio</title>\n  <link rel=\"stylesheet\" href=\"style.css\">\n</head>\n<body>\n  <header>\n    <h1>Miguel</h1>\n    <p>Desenvolvedor web</p>\n  </header>\n  <footer>&copy; 2026</footer>\n</body>\n</html>\n"
+          },
+          {
+            "operator": "response_language_pt"
+          }
+        ],
+        "explanation": [
+          "the name occurs twice, so a single edit needs replace_all or two edits; a read_file first is inside the budget",
+          "answering that the change will be made, without a tool call, leaves the file as it was and fails file_content_equals",
+          "the request does not open with \"No index.html\": the model read that Portuguese \"in\" as the English \"no\" and refused to touch the file"
+        ]
+      }
+    },
+    {
+      "id": "calculate_for_arithmetic_in_the_request",
+      "type": "model_task",
+      "tags": [
+        "tool_selection",
+        "calculate",
+        "language_pt"
+      ],
+      "origin": "Nenhuma fixture de modelo exercitava calculate: sem ela não havia como saber se o modelo o escolhe quando o Operator não o nomeia",
+      "stimulus": {
+        "user_request": "Quanto é 17,5% de 2.348,90 reais?"
+      },
+      "oracle": {
+        "must_call": [
+          "calculate"
+        ],
+        "must_not_call": [],
+        "max_tool_calls": 2,
+        "typed_assertions": [
+          {
+            "operator": "tool_called",
+            "tool": "calculate"
+          },
+          {
+            "operator": "max_tool_calls",
+            "maximum": 2
+          },
+          {
+            "operator": "response_contains",
+            "content": "411"
+          }
+        ],
+        "explanation": [
+          "the Operator does not name the tool; a percentage of a decimal amount is the calculation a small model gets wrong by heart",
+          "411 is the integer part of 411.0575, so the check does not depend on the decimal separator or on rounding",
+          "no response_language_pt: the right answer is one line of figures, too short for the language detector"
+        ]
+      }
+    },
+    {
+      "id": "get_weather_for_a_weather_question",
+      "type": "model_task",
+      "tags": [
+        "tool_selection",
+        "get_weather",
+        "confusable_pair",
+        "language_pt"
+      ],
+      "origin": "Nenhuma fixture de modelo exercitava get_weather: a pergunta de tempo sem nomear a tool é o caso em que o modelo pode ir ao web_search",
+      "stimulus": {
+        "user_request": "Vai chover em Recife nos próximos dias?"
+      },
+      "oracle": {
+        "must_call": [
+          "get_weather"
+        ],
+        "must_not_call": [
+          "web_search",
+          "web_fetch"
+        ],
+        "max_tool_calls": 2,
+        "typed_assertions": [
+          {
+            "operator": "tool_called",
+            "tool": "get_weather"
+          },
+          {
+            "operator": "tool_not_called",
+            "tool": "web_search"
+          },
+          {
+            "operator": "tool_not_called",
+            "tool": "web_fetch"
+          },
+          {
+            "operator": "max_tool_calls",
+            "maximum": 2
+          },
+          {
+            "operator": "response_language_pt"
+          }
+        ],
+        "explanation": [
+          "the bench answers the Open-Meteo endpoints with a fixed Recife forecast, so no third-party service is contacted",
+          "web_search could also answer; the dedicated tool is the one that returns structured, current data"
+        ]
+      }
+    },
+    {
+      "id": "list_directory_for_what_a_folder_holds",
+      "type": "model_task",
+      "tags": [
+        "tool_selection",
+        "list_directory",
+        "language_pt"
+      ],
+      "origin": "Nenhuma fixture de modelo exercitava list_directory",
+      "stimulus": {
+        "user_request": "O que tem dentro da pasta docs?",
+        "workspace": [
+          {
+            "path": "docs/guia.md",
+            "content": "# Guia\n"
+          },
+          {
+            "path": "docs/faq.md",
+            "content": "# FAQ\n"
+          },
+          {
+            "path": "src/app.py",
+            "content": "print('oi')\n"
+          }
+        ]
+      },
+      "oracle": {
+        "must_call": [
+          "list_directory"
+        ],
+        "must_not_call": [
+          "read_file"
+        ],
+        "max_tool_calls": 2,
+        "typed_assertions": [
+          {
+            "operator": "tool_called",
+            "tool": "list_directory"
+          },
+          {
+            "operator": "tool_not_called",
+            "tool": "read_file"
+          },
+          {
+            "operator": "max_tool_calls",
+            "maximum": 2
+          },
+          {
+            "operator": "response_contains",
+            "content": "guia.md"
+          },
+          {
+            "operator": "response_contains",
+            "content": "faq.md"
+          },
+          {
+            "operator": "response_language_pt"
+          }
+        ],
+        "explanation": [
+          "the question is what the folder holds, not what the files say, so no file needs to be opened"
+        ]
+      }
+    },
+    {
+      "id": "not_found_recovers_through_the_suggested_path",
+      "type": "model_task",
+      "tags": [
+        "error_recovery",
+        "read_file",
+        "language_pt"
+      ],
+      "origin": "Turn real do Operator: 'vibe-coder/nota-fiscal' para 'Vibe coder/nota.avif', três palpites e nenhum arquivo lido",
+      "stimulus": {
+        "user_request": "Na pasta vibe coder tem uma nota. Qual é o número do pedido que está nela?",
+        "workspace": [
+          {
+            "path": "Vibe coder/nota.txt",
+            "content": "Nota de compra\nPedido: 77341\nTotal: R$ 120,00\n"
+          }
+        ]
+      },
+      "oracle": {
+        "must_call": [
+          "read_file"
+        ],
+        "must_not_call": [
+          "web_search"
+        ],
+        "max_tool_calls": 4,
+        "typed_assertions": [
+          {
+            "operator": "tool_called",
+            "tool": "read_file"
+          },
+          {
+            "operator": "max_tool_calls",
+            "maximum": 0,
+            "effect": "data_egress"
+          },
+          {
+            "operator": "max_tool_calls",
+            "maximum": 4
+          },
+          {
+            "operator": "response_contains",
+            "content": "77341"
+          },
+          {
+            "operator": "response_language_pt"
+          }
+        ],
+        "explanation": [
+          "the Operator names the folder in lower case and without the file name; a not-found result names the real path, and following it is the recovery being measured"
+        ]
+      }
+    },
+    {
+      "id": "grep_search_ignores_case_when_the_operator_does",
+      "type": "model_task",
+      "tags": [
+        "tool_selection",
+        "grep_search",
+        "language_pt"
+      ],
+      "origin": "grep_search ganhou ignore_case e include; a pergunta do Operator não diz a caixa em que o texto foi escrito",
+      "stimulus": {
+        "user_request": "Em quais arquivos Python aparece a palavra token, maiúscula ou minúscula?",
+        "workspace": [
+          {
+            "path": "src/auth.py",
+            "content": "TOKEN_TTL = 60\n"
+          },
+          {
+            "path": "src/cli.py",
+            "content": "def main():\n    token = read()\n"
+          },
+          {
+            "path": "src/util.py",
+            "content": "def soma(a, b):\n    return a + b\n"
+          },
+          {
+            "path": "notas.md",
+            "content": "token de acesso\n"
+          }
+        ]
+      },
+      "oracle": {
+        "must_call": [
+          "grep_search"
+        ],
+        "must_not_call": [
+          "read_file"
+        ],
+        "max_tool_calls": 2,
+        "typed_assertions": [
+          {
+            "operator": "tool_called",
+            "tool": "grep_search"
+          },
+          {
+            "operator": "tool_not_called",
+            "tool": "read_file"
+          },
+          {
+            "operator": "max_tool_calls",
+            "maximum": 2
+          },
+          {
+            "operator": "response_contains",
+            "content": "auth.py"
+          },
+          {
+            "operator": "response_contains",
+            "content": "cli.py"
+          },
+          {
+            "operator": "response_contains",
+            "content": "util.py",
+            "present": false
+          },
+          {
+            "operator": "response_language_pt"
+          }
+        ],
+        "explanation": [
+          "TOKEN in auth.py only matches with ignore_case; notas.md is not Python, so include or reading the paths filters it out"
         ]
       }
     }

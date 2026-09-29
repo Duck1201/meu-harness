@@ -39,7 +39,7 @@
       "status": "enabled",
       "effects": ["workspace_read"],
       "required_grants": ["WorkspaceRootGrant"],
-      "description": "Reads a range from an existing text file. Use when the file is already known. Do not use it to find files; use glob.",
+      "description": "Reads a text file from the workspace. Use it when you know the path and need what the file says, and always before editing it. To find a file by name use glob; to find text across files use grep_search.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -47,27 +47,27 @@
           "file_path": {
             "type": "string",
             "minLength": 1,
-            "description": "Path relative to the workspace root. Absolute paths and paths outside the workspace are rejected."
+            "description": "Path relative to the workspace root."
           },
           "offset": {
             "type": "integer",
             "minimum": 0,
             "default": 0,
-            "description": "First line to return, zero-based."
+            "description": "First line to return, zero-based. To continue a long file, pass the next_offset of the previous result."
           },
           "max_lines": {
             "type": "integer",
             "minimum": 1,
             "maximum": 2000,
             "default": 500,
-            "description": "Maximum number of lines to return. Lines, not items and not characters: limit means a count of items everywhere it appears, and this argument is named apart because it does not measure one."
+            "description": "Maximum number of lines to return."
           }
         },
         "required": ["file_path"]
       },
       "executor_invariants": [
-        "A successful result includes content_sha256 so later write_file or edit calls can use an optimistic-concurrency precondition.",
-        "The result states whether it was truncated and how to request the next range."
+        "A successful result reports total_lines, and next_offset when the file continues past the returned range.",
+        "A path that does not exist fails with path_not_found and names similar existing paths."
       ],
       "replay_policy": "never_cache_workspace_reads"
     },
@@ -76,7 +76,7 @@
       "status": "enabled",
       "effects": ["workspace_write"],
       "required_grants": ["WorkspaceRootGrant", "WriteGrant"],
-      "description": "Creates a text file or replaces its complete contents. Use only when the full desired content is known. Replacing an existing file requires its current SHA-256 precondition.",
+      "description": "Creates a file, or replaces the whole content of an existing one. Use it for a new file or a complete rewrite. To change part of an existing file, use edit instead.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -84,23 +84,18 @@
           "file_path": {
             "type": "string",
             "minLength": 1,
-            "description": "Path relative to the workspace root. Absolute paths and paths outside the workspace are rejected."
+            "description": "Path relative to the workspace root."
           },
           "content": {
             "type": "string",
-            "description": "Complete UTF-8 content to write."
-          },
-          "expected_current_sha256": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$",
-            "description": "Required when replacing an existing file. The write fails if the current bytes do not match this SHA-256."
+            "description": "The complete content of the file, as UTF-8 text."
           }
         },
         "required": ["file_path", "content"]
       },
       "executor_invariants": [
-        "Creating a missing file does not require expected_current_sha256.",
-        "Replacing an existing file requires expected_current_sha256.",
+        "Creating a file creates its missing parent directories.",
+        "Replacing an existing file needs no precondition from the model; the Operator's confirmation gate covers the write.",
         "After an HTML write, page verification is controlled by config/harness.json and is not model-selectable."
       ],
       "replay_policy": "reconcile_postcondition_before_replay"
@@ -110,7 +105,7 @@
       "status": "enabled",
       "effects": ["workspace_write"],
       "required_grants": ["WorkspaceRootGrant", "WriteGrant"],
-      "description": "Replaces an inclusive line range in an existing text file. Use for a localized change. The edit requires the current file SHA-256 and fails on stale content.",
+      "description": "Changes part of an existing file by replacing an exact piece of its text. read_file the file first, copy the text to change into old_string exactly as it appears, and write its new version in new_string. Fails if old_string is not in the file or appears more than once. For a new file or a full rewrite use write_file.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -118,38 +113,28 @@
           "file_path": {
             "type": "string",
             "minLength": 1,
-            "description": "Path relative to the workspace root. Absolute paths and paths outside the workspace are rejected."
+            "description": "Path relative to the workspace root."
           },
-          "start_line": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "First line to replace, one-based and inclusive."
-          },
-          "end_line": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "Last line to replace, one-based and inclusive. Must be greater than or equal to start_line."
-          },
-          "replacement": {
+          "old_string": {
             "type": "string",
-            "description": "Exact UTF-8 replacement text. Whitespace and final newlines are significant."
+            "minLength": 1,
+            "description": "The exact text to replace, copied from the file with its indentation and line breaks. Include enough surrounding lines to make it unique."
           },
-          "expected_current_sha256": {
+          "new_string": {
             "type": "string",
-            "pattern": "^[a-f0-9]{64}$",
-            "description": "SHA-256 of the current file bytes. The edit fails if it does not match."
+            "description": "The text that replaces old_string. Use real line breaks and tabs, not the escapes \\n and \\t. Empty deletes old_string."
+          },
+          "replace_all": {
+            "type": "boolean",
+            "default": false,
+            "description": "Replace every occurrence of old_string instead of requiring exactly one."
           }
         },
-        "required": [
-          "file_path",
-          "start_line",
-          "end_line",
-          "replacement",
-          "expected_current_sha256"
-        ]
+        "required": ["file_path", "old_string", "new_string"]
       },
       "executor_invariants": [
-        "end_line must be greater than or equal to start_line.",
+        "old_string must occur exactly once unless replace_all is true; otherwise the edit fails and says how many times and on which lines it occurs.",
+        "A successful result returns an excerpt of the edited region so the model sees what it wrote.",
         "The runtime parser must pass byte-for-byte whitespace round-trip tests before this tool is enabled."
       ],
       "replay_policy": "reconcile_postcondition_before_replay"
@@ -159,7 +144,7 @@
       "status": "enabled",
       "effects": ["workspace_read"],
       "required_grants": ["WorkspaceRootGrant"],
-      "description": "Lists immediate entries in a known directory. Do not use it for recursive filename matching; use glob.",
+      "description": "Lists the files and folders directly inside one directory. Use it to see what a folder contains. To find files by name anywhere in the workspace, use glob.",
       "replay_policy": "never_cache_workspace_reads",
       "parameters": {
         "type": "object",
@@ -168,7 +153,7 @@
           "directory_path": {
             "type": "string",
             "minLength": 1,
-            "description": "Directory path relative to the workspace root. Use . for the workspace root."
+            "description": "Directory path relative to the workspace root; . is the root."
           },
           "offset": {
             "type": "integer",
@@ -192,7 +177,7 @@
       "status": "enabled",
       "effects": ["workspace_read"],
       "required_grants": ["WorkspaceRootGrant"],
-      "description": "Finds file and directory paths by glob pattern. Use it to locate names, not to search file contents.",
+      "description": "Finds files and folders whose path matches a pattern such as **/*.md. Use it when you know part of a name but not where it is. It does not look inside files; use grep_search for that.",
       "replay_policy": "never_cache_workspace_reads",
       "parameters": {
         "type": "object",
@@ -201,7 +186,7 @@
           "pattern": {
             "type": "string",
             "minLength": 1,
-            "description": "Glob pattern evaluated inside the workspace, with standard glob semantics: a plain pattern such as *.md matches only the chosen directory, and ** is required to descend into subdirectories."
+            "description": "Glob pattern. *.md matches only the chosen directory; **/*.md also searches every subdirectory."
           },
           "directory_path": {
             "type": "string",
@@ -224,7 +209,7 @@
       "status": "enabled",
       "effects": ["workspace_read"],
       "required_grants": ["WorkspaceRootGrant"],
-      "description": "Searches text or a regular expression inside workspace files. Use it for content, not for filename discovery; use glob for paths.",
+      "description": "Searches for text inside files and returns each matching line with its file and line number. Use it to find where something is written. It does not match file names; use glob for that.",
       "replay_policy": "never_cache_workspace_reads",
       "parameters": {
         "type": "object",
@@ -233,7 +218,7 @@
           "pattern": {
             "type": "string",
             "minLength": 1,
-            "description": "Text or regular expression to search for."
+            "description": "Text to search for, or a regular expression when is_regex is true."
           },
           "directory_path": {
             "type": "string",
@@ -244,6 +229,16 @@
             "type": "boolean",
             "default": false,
             "description": "When true, pattern is a regular expression."
+          },
+          "ignore_case": {
+            "type": "boolean",
+            "default": false,
+            "description": "When true, letter case is ignored."
+          },
+          "include": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Only search files whose path matches this glob, such as **/*.py."
           },
           "limit": {
             "type": "integer",
@@ -262,7 +257,7 @@
       "effects": ["data_egress"],
       "required_grants": ["WebAccessGrant"],
       "result_taints": ["UntrustedWebTaint"],
-      "description": "Searches the public web to discover current pages. Use web_fetch when the exact URL is already known.",
+      "description": "Searches the web and returns titles, URLs and snippets. Use it for news, current events, prices, recent releases and any fact you are not sure of, and to find a page whose URL you do not know. Then read the best result with web_fetch.",
       "replay_policy": "cache_normalized_arguments_per_turn",
       "parameters": {
         "type": "object",
@@ -272,7 +267,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 1000,
-            "description": "Search query."
+            "description": "What to search for, written as a search engine query."
           },
           "limit": {
             "type": "integer",
@@ -291,7 +286,7 @@
       "effects": ["data_egress"],
       "required_grants": ["WebAccessGrant"],
       "result_taints": ["UntrustedWebTaint"],
-      "description": "Fetches readable content from a known public URL. The executor chooses HTTP or a browser internally. Do not use it to discover URLs; use web_search.",
+      "description": "Reads the text of a web page from its URL. Use it when the Operator gives a URL, or to read a page that web_search found. The executor chooses HTTP or a browser internally.",
       "replay_policy": "cache_exact_url_per_turn",
       "parameters": {
         "type": "object",
@@ -308,7 +303,7 @@
             "minimum": 100,
             "maximum": 50000,
             "default": 12000,
-            "description": "Maximum number of extracted characters to return. Characters, not results: a number that suits web_search means nothing here. The cut is made from the top of the page, and a page usually opens with navigation, notices and an infobox before any prose, so lowering this drops the article and keeps the noise. Leave it at the default unless the page is known to be short."
+            "description": "Maximum number of characters to return, counted from the top of the page. Keep the default unless the page is known to be short: pages open with menus and notices before the text."
           }
         },
         "required": ["url"]
@@ -324,7 +319,7 @@
       "status": "enabled",
       "effects": ["corpus_read"],
       "required_grants": ["CorpusGrant"],
-      "description": "Searches the Corpus the Operator selected for this conversation and returns verbatim passages with their provenance. The first passages were already retrieved before this step: use this only to search again with different terms.",
+      "description": "Searches the documents the Operator attached to this conversation and returns passages with their source. Passages for the current question were already retrieved before this step; call it only to look for something else or with different words.",
       "replay_policy": "cache_normalized_arguments_per_turn",
       "parameters": {
         "type": "object",
@@ -357,7 +352,7 @@
       "status": "enabled",
       "effects": ["pure_compute"],
       "required_grants": [],
-      "description": "Evaluates one arithmetic expression exactly. Reads nothing, writes nothing and reaches no network.",
+      "description": "Computes an arithmetic expression exactly. Use it for every calculation with large numbers, several steps or percentages instead of working it out yourself.",
       "replay_policy": "cache_normalized_arguments_per_turn",
       "parameters": {
         "type": "object",
@@ -382,7 +377,7 @@
       "effects": ["data_egress"],
       "required_grants": ["WebAccessGrant"],
       "result_taints": ["UntrustedWebTaint"],
-      "description": "Reports current weather and the daily forecast for a place, resolving the place name to coordinates first.",
+      "description": "Gets the current weather and the daily forecast for a place. Use it whenever the Operator asks about weather, temperature, rain or wind somewhere.",
       "replay_policy": "cache_normalized_arguments_per_turn",
       "parameters": {
         "type": "object",
@@ -410,7 +405,7 @@
       "status": "enabled",
       "effects": ["workspace_read", "local_inference"],
       "required_grants": ["WorkspaceRootGrant"],
-      "description": "Asks a local vision model one question about a PNG, JPEG or WebP image in the workspace and returns its answer. Use it when the Operator refers to a screenshot, photo, receipt or chart file. The reading can be wrong on small text and digits.",
+      "description": "Asks a local vision model one question about a PNG, JPEG or WebP image in the workspace and returns its answer. You cannot see images yourself: use it whenever the Operator mentions a screenshot, photo, receipt, chart or other image file. The reading can be wrong on small text and digits.",
       "replay_policy": "never_cache_workspace_reads",
       "parameters": {
         "type": "object",

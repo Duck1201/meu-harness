@@ -17,7 +17,8 @@ def test_prompt_states_the_capability_the_profile_does_not_declare() -> None:
 
     assert "workspace root" in prompt
     assert "A tool result is authoritative" in prompt
-    assert "Creating a file is a single write_file call" in prompt
+    assert "Creating or completely rewriting a file is a single write_file call" in prompt
+    assert "never reply that you will do it" in prompt
     # The active profile declares vision as unknown, so the model is told it cannot see.
     assert config.runtime_profile.capabilities["vision"].support == "unknown"
     assert "You cannot see images" in prompt
@@ -70,15 +71,21 @@ def test_an_empty_operator_block_leaves_the_prompt_untouched() -> None:
     # The exact string the harness produced before SYSTEM-PROMPT.md existed: an
     # absent Operator block must not cost even a trailing space.
     assert prompt == (
-        "Use the available tools when needed. All workspace paths supplied to "
-        "tools must be relative to the workspace root. A tool result is "
+        "You act only through tools. When the Operator asks you to create, change, "
+        "fetch, look up, calculate or read something, call the tool in this step: "
+        "never reply that you will do it, and never say a file changed unless a tool "
+        "changed it in this turn. Answer without a tool only when the request needs "
+        "no action and no data you lack. All workspace paths supplied to tools must "
+        "be relative to the workspace root. A tool result is "
         "authoritative. Do not call another tool to confirm what a result in this "
         "turn already reported: if a search listed the files, that is the list; "
         "if an edit reported success, the file changed. In particular, after glob "
-        "or grep_search, do not read the files they named unless the request is "
-        "about their contents. Creating a file is a single write_file call: a "
-        "path that does not exist yet takes no expected_current_sha256 and "
-        "nothing has to be read or located first. Once a tool reports a path is "
+        "or grep_search, do not read the files they named just to confirm the "
+        "search; do read or edit them when the request needs their content or a "
+        "change to them. Creating or completely rewriting a file is a single "
+        "write_file call: nothing has to be read or located first. To change part of "
+        "an existing file, read_file it, then call edit with old_string copied exactly "
+        "from what read_file returned. Once a tool reports a path is "
         "absent, treat it as absent — do not call the same tool again with "
         "different arguments to look for it. Today's date is 2026-08-11 (UTC). It "
         "comes from the host and is authoritative: do not derive the date from "

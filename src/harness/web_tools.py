@@ -350,6 +350,8 @@ class WebToolExecutor:
         http_transport: HttpTransport | None = None,
         search_endpoint: str | None = None,
         fallback_search_endpoint: str = DUCKDUCKGO_SEARCH_ENDPOINT,
+        geocoding_endpoint: str = GEOCODING_ENDPOINT,
+        forecast_endpoint: str = FORECAST_ENDPOINT,
         browser_capability: BrowserCapability | None = None,
         browser_egress_guard: BrowserEgressGuard | None = None,
         max_response_bytes: int = 2 * 1024 * 1024,
@@ -368,6 +370,8 @@ class WebToolExecutor:
         self._http_transport = http_transport or AiohttpHttpTransport()
         self._search_endpoint = search_endpoint
         self._fallback_search_endpoint = fallback_search_endpoint
+        self._geocoding_endpoint = geocoding_endpoint
+        self._forecast_endpoint = forecast_endpoint
         self._search_egress_guard = self._egress_guard
         self._browser_capability = browser_capability
         self._browser_egress_guard = browser_egress_guard
@@ -767,7 +771,9 @@ class WebToolExecutor:
         location = cast(str, call.arguments["location"])
         days = cast(int, call.arguments.get("days", 3))
         geocoding = await self._json_request(
-            GEOCODING_ENDPOINT + "?" + urlencode({"name": location, "count": 1, "format": "json"})
+            self._geocoding_endpoint
+            + "?"
+            + urlencode({"name": location, "count": 1, "format": "json"})
         )
         if geocoding is None:
             return _provider_error(
@@ -787,7 +793,7 @@ class WebToolExecutor:
                 meta=_weather_meta(),
             )
         forecast = await self._json_request(
-            FORECAST_ENDPOINT
+            self._forecast_endpoint
             + "?"
             + urlencode(
                 {
@@ -814,9 +820,9 @@ class WebToolExecutor:
             retryable=False,
             data={
                 "place": place,
-                "current": payload.get("current"),
+                "current": _with_conditions(payload.get("current")),
                 "current_units": payload.get("current_units"),
-                "daily": payload.get("daily"),
+                "daily": _with_conditions(payload.get("daily")),
                 "daily_units": payload.get("daily_units"),
             },
             error=None,
@@ -1122,6 +1128,57 @@ def _search_result(
         error=None,
         meta=meta,
     )
+
+
+# WMO 4677, como a Open-Meteo devolve: um número que o modelo não sabe ler, e que
+# ele traduzia de memória — "3" virou "chuva forte" num Turn real.
+_WMO_CONDITIONS: Mapping[int, str] = {
+    0: "clear sky",
+    1: "mainly clear",
+    2: "partly cloudy",
+    3: "overcast",
+    45: "fog",
+    48: "depositing rime fog",
+    51: "light drizzle",
+    53: "moderate drizzle",
+    55: "dense drizzle",
+    56: "light freezing drizzle",
+    57: "dense freezing drizzle",
+    61: "slight rain",
+    63: "moderate rain",
+    65: "heavy rain",
+    66: "light freezing rain",
+    67: "heavy freezing rain",
+    71: "slight snowfall",
+    73: "moderate snowfall",
+    75: "heavy snowfall",
+    77: "snow grains",
+    80: "slight rain showers",
+    81: "moderate rain showers",
+    82: "violent rain showers",
+    85: "slight snow showers",
+    86: "heavy snow showers",
+    95: "thunderstorm",
+    96: "thunderstorm with slight hail",
+    99: "thunderstorm with heavy hail",
+}
+
+
+def _condition(code: object) -> JsonValue:
+    return _WMO_CONDITIONS.get(code, "unknown") if isinstance(code, int) else None
+
+
+def _with_conditions(block: JsonValue) -> JsonValue:
+    """Adds `conditions` in words next to each `weather_code` the provider sent."""
+    if not isinstance(block, Mapping):
+        return block
+    rendered = dict(cast(Mapping[str, JsonValue], block))
+    code = rendered.get("weather_code")
+    if isinstance(code, list):
+        rendered["conditions"] = [_condition(item) for item in code]
+    elif code is not None:
+        rendered["conditions"] = _condition(code)
+    return rendered
 
 
 def _weather_meta() -> dict[str, Any]:

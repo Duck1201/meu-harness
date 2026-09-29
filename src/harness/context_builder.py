@@ -143,8 +143,16 @@ class ContextBuilder:
     def _render(self, system: str, turns: Sequence[ContextTurn]) -> tuple[ModelMessage, ...]:
         messages = [ModelMessage(role=ModelRole.SYSTEM, content=system)]
         seen_payloads: dict[str, CanonicalHistoryEntry] = {}
-        for turn in turns:
+        current = len(turns) - 1
+        for index, turn in enumerate(turns):
             for entry in turn.entries:
+                if (
+                    entry.kind is CanonicalHistoryEntryKind.REJECTED_MODEL_ATTEMPT
+                    and index != current
+                ):
+                    # Uma recusa de turno encerrado não ensina nada ao próximo passo e,
+                    # repetida no contexto, vira exemplo de resposta que o modelo copia.
+                    continue
                 message = _entry_message(entry, seen_payloads, self._render_payload)
                 if (
                     entry.kind is CanonicalHistoryEntryKind.INTERNAL_AUTOMATION
@@ -166,20 +174,22 @@ def _entry_message(
     if entry.kind is CanonicalHistoryEntryKind.USER_MESSAGE:
         return ModelMessage(role=ModelRole.USER, content=_required_string(payload, "content"))
     if entry.kind is CanonicalHistoryEntryKind.REJECTED_MODEL_ATTEMPT:
-        return ModelMessage(
-            role=ModelRole.ASSISTANT,
-            content=render("rejected_model_attempt", payload),
-        )
+        # Vai como aviso do harness, não como fala do modelo: renderizada como
+        # assistant, a recusa (com o corpo cru do Ollama) era a resposta anterior
+        # "dele", e o Gemma passava a responder no mesmo JSON.
+        return ModelMessage(role=ModelRole.USER, content=_rejection_notice(payload))
     if entry.kind is CanonicalHistoryEntryKind.MODEL_ATTEMPT:
         content = payload.get("content")
-        text = content if isinstance(content, str) else render("model_attempt", payload)
+        # Um passo só de tool calls tem conteúdo vazio: as calls seguem no campo
+        # nativo. Serializar o payload aqui ensinava o modelo a escrever tool
+        # calls como texto na resposta final.
         return ModelMessage(
             role=ModelRole.ASSISTANT,
-            content=text,
+            content=content if isinstance(content, str) else "",
             tool_calls=_tool_calls(payload.get("tool_calls")),
         )
     if entry.kind is CanonicalHistoryEntryKind.TOOL_RESULT:
-        rendered = dict(payload)
+        rendered = _model_facing_result(payload)
         data = payload.get("data")
         if data is not None:
             digest = hashlib.sha256(render("data", data).encode()).hexdigest()
@@ -203,6 +213,45 @@ def _entry_message(
             name=_optional_string(payload, "automation_id"),
         )
     raise ContextBuilderError(f"unsupported canonical history entry: {entry.kind}")
+
+
+def _rejection_notice(payload: Mapping[str, JsonValue]) -> str:
+    error = payload.get("error")
+    code = error.get("code") if isinstance(error, Mapping) else None
+    message = error.get("message") if isinstance(error, Mapping) else None
+    details = [item for item in (code, message) if isinstance(item, str) and item]
+    reason = f" ({': '.join(details)})" if details else ""
+    return (
+        f"[harness] Your previous reply could not be used{reason}. Reply again: either call "
+        "a tool through the tool-calling interface, or write your answer for the Operator as "
+        "plain text."
+    )
+
+
+def _model_facing_result(payload: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+    """O ToolResult como o modelo precisa dele; o canônico continua inteiro.
+
+    `tool_call_id` e `tool_name` já vão nos campos nativos da mensagem, e
+    produtor, engine, latência e listas vazias não mudam decisão nenhuma — eram
+    metade dos caracteres de cada resultado. Fica o que muda o próximo passo:
+    status, dado ou erro, se vale tentar de novo, corte e procedência não confiável.
+    """
+    status = payload.get("status")
+    rendered: dict[str, JsonValue] = {"status": status}
+    if payload.get("data") is not None:
+        rendered["data"] = payload.get("data")
+    if payload.get("error") is not None:
+        rendered["error"] = payload.get("error")
+    if status in {"failed", "blocked"}:
+        rendered["retryable"] = payload.get("retryable")
+    meta = payload.get("meta")
+    if isinstance(meta, Mapping):
+        if meta.get("truncated") is True:
+            rendered["truncated"] = True
+        taints = meta.get("taints")
+        if isinstance(taints, Sequence) and not isinstance(taints, str) and taints:
+            rendered["taints"] = taints
+    return rendered
 
 
 def _tool_calls(value: JsonValue) -> tuple[ToolCall, ...]:
@@ -263,6 +312,21 @@ def _xml_document(root: str, value: JsonValue) -> str:
     return f"<{root}>{_xml_text(value)}</{root}>"
 
 
+# Conteúdo externo não pode abrir nem fechar turno, tool call ou raciocínio no
+# template do runtime: o Ollama tokeniza marcador especial dentro do texto. O
+# escape antigo trocava todo `<`, `>` e `&`, e o modelo passou a ler `<title>`
+# como `\\u003ctitle\\u003e` e a gravar esses escapes em arquivo. Agora só o
+# `<` que começa um marcador: os do Gemma 4 (`<|turn>`, `<turn|>`, `<|"|>`,
+# `<eos>`...) e os do Qwen, que motivaram a regra (`<tool_call>`, `</think>`,
+# `<|im_start|>`). HTML e código chegam ao modelo como estão no arquivo.
+_TEMPLATE_MARKER = re.compile(
+    r"<(?=\|)"
+    r"|<(?=[A-Za-z_\"]*\|>)"
+    r"|<(?=/?(?:tool_call|tool_response|tool|think|im_start|im_end|start_of_turn|end_of_turn"
+    r"|pad|eos|bos|unk|mask)>)"
+)
+
+
 def _json_document(root: str, value: JsonValue) -> str:
     """O render anterior ao ADR-0010, mantido como braço de controle."""
     del root
@@ -273,7 +337,7 @@ def _json_document(root: str, value: JsonValue) -> str:
         separators=(",", ":"),
         allow_nan=False,
     )
-    return serialized.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    return _TEMPLATE_MARKER.sub("\\\\u003c", serialized)
 
 
 def _xml_text(value: JsonValue) -> str:
