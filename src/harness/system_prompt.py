@@ -55,6 +55,17 @@ _MUTATION_DIRECTNESS = (
     "same tool again with different arguments to look for it."
 )
 
+# Decisão do Operator (29/09/2026): o que o modelo não sabe ele vai buscar, em
+# vez de responder de memória ou dizer que não sabe. Só entra no prompt quando o
+# web_search está no catálogo; sem ele a frase mandaria chamar uma tool que não há.
+_SEARCH_WHAT_YOU_DO_NOT_KNOW = (
+    "When the answer depends on a fact you do not know or are not sure of — anything "
+    "recent, prices, people, products, laws, or a name you do not recognize — call "
+    "web_search immediately, in this step, instead of answering from memory, guessing or "
+    "saying you do not know. Do not search for what you know well or for an explanation "
+    "that needs no outside facts."
+)
+
 # Num Turn real a busca voltou vazia e o modelo respondeu "iniciei a busca,
 # aguarde": leu o resultado como algo que ainda estava rodando.
 _RESULTS_ARE_FINAL = (
@@ -144,6 +155,10 @@ def build_system_prompt(
     see while the tool that sees is on offer would contradict the catalogue.
     """
     capabilities = config.runtime_profile.capabilities
+    web_search_offered = any(
+        tool.name == "web_search" and tool.status == "enabled"
+        for tool in config.tool_registry.model_tools
+    )
     limits = [
         _VISION_TOOL_LINE if name == "vision" and vision_tool_offered else sentence
         for name, sentence in _MODEL_FACING_LIMITS.items()
@@ -157,6 +172,7 @@ def build_system_prompt(
             _BASE,
             _RESULT_AUTHORITY,
             _MUTATION_DIRECTNESS,
+            *([_SEARCH_WHAT_YOU_DO_NOT_KNOW] if web_search_offered else []),
             _RESULTS_ARE_FINAL,
             _current_date(today),
             *limits,

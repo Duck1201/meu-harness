@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from harness import load_config
-from harness.config import CapabilityConfig
+from harness.config import CapabilityConfig, HarnessConfig
 from harness.system_prompt import build_system_prompt, load_operator_notes
 
 _TODAY = date(2026, 8, 11)
@@ -87,7 +87,12 @@ def test_an_empty_operator_block_leaves_the_prompt_untouched() -> None:
         "an existing file, read_file it, then call edit with old_string copied exactly "
         "from what read_file returned. Once a tool reports a path is "
         "absent, treat it as absent — do not call the same tool again with "
-        "different arguments to look for it. Every tool result is final: nothing "
+        "different arguments to look for it. When the answer depends on a fact you do "
+        "not know or are not sure of — anything recent, prices, people, products, laws, "
+        "or a name you do not recognize — call web_search immediately, in this step, "
+        "instead of answering from memory, guessing or saying you do not know. Do not "
+        "search for what you know well or for an explanation that needs no outside "
+        "facts. Every tool result is final: nothing "
         "keeps running after it, so never tell the Operator to wait for results. If "
         "a search returns nothing, try once with other words, then say plainly that "
         "nothing was found; if a tool failed, say it failed. Today's date is "
@@ -138,3 +143,31 @@ def test_an_oversized_operator_block_is_refused_before_the_turn(tmp_path: Path) 
 
 def test_the_file_in_the_repo_carries_no_operator_text() -> None:
     assert load_operator_notes(Path("SYSTEM-PROMPT.md")) == ""
+
+
+def test_the_search_rule_only_appears_when_web_search_is_offered() -> None:
+    config = load_config()
+    registry = config.tool_registry
+    without_search = config.model_copy(
+        update={
+            "tool_registry": registry.model_copy(
+                update={
+                    "model_tools": tuple(
+                        tool.model_copy(update={"status": "disabled"})
+                        if tool.name == "web_search"
+                        else tool
+                        for tool in registry.model_tools
+                    )
+                }
+            )
+        }
+    )
+
+    def prompt(value: HarnessConfig) -> str:
+        return build_system_prompt(
+            value, today=_TODAY, operator_notes="", vision_tool_offered=False
+        )
+
+    assert "call web_search immediately" in prompt(config)
+    # Mandar chamar uma tool que não está no catálogo é pedir uma chamada inválida.
+    assert "call web_search immediately" not in prompt(without_search)

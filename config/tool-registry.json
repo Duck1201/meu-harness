@@ -405,7 +405,7 @@
       "status": "enabled",
       "effects": ["workspace_read", "local_inference"],
       "required_grants": ["WorkspaceRootGrant"],
-      "description": "Asks a local vision model one question about a PNG, JPEG or WebP image in the workspace and returns its answer. You cannot see images yourself: use it whenever the Operator mentions a screenshot, photo, receipt, chart or other image file. The reading can be wrong on small text and digits.",
+      "description": "Asks a local vision model one question about a PNG, JPEG or WebP image in the workspace and returns its answer. You cannot see images yourself: use it whenever the Operator mentions a screenshot, photo, receipt, chart or other image file. Ask for what the Operator needs from the image; when it shows a problem, ask it to transcribe every visible text, number and message rather than to describe the layout. The reading can be wrong on small text and digits.",
       "replay_policy": "never_cache_workspace_reads",
       "parameters": {
         "type": "object",
@@ -420,7 +420,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 500,
-            "description": "What to find in the image, as a specific question, e.g. 'What is the total on this receipt?'."
+            "description": "What to find in the image, as a specific question, e.g. 'What is the total on this receipt?' or 'Transcribe every field, value and message visible in this screenshot.'"
           }
         },
         "required": ["file_path", "question"]

@@ -2,7 +2,7 @@
   "schema_version": 2,
   "dataset_id": "harness_2_contract_regressions",
   "dataset_version": "3.2.0",
-  "dataset_digest_sha256": "bf3fecdc6c49653913239a8b8bc7421b3a91e0094db9c9dfc392196a352cb245",
+  "dataset_digest_sha256": "e6a065abfe68cb6a8e05830d7f8ea068983dee2af3277376f22047d57f11f11b",
   "digest_contract": {
     "algorithm": "sha256",
     "canonicalization": "sorted_keys_compact_utf8",
@@ -1399,6 +1399,42 @@
         ],
         "explanation": [
           "TOKEN in auth.py only matches with ignore_case; notas.md is not Python, so include or reading the paths filters it out"
+        ]
+      }
+    },
+    {
+      "id": "web_search_for_a_fact_the_model_cannot_know",
+      "type": "model_task",
+      "tags": [
+        "tool_selection",
+        "web_search",
+        "language_pt"
+      ],
+      "origin": "Decisão do Operator (29/09/2026): o que o modelo não sabe ele busca na web imediatamente, em vez de responder de memória",
+      "stimulus": {
+        "user_request": "Quanto está custando o dólar em reais hoje?",
+        "network_stub": "search_results_available"
+      },
+      "oracle": {
+        "must_call": [
+          "web_search"
+        ],
+        "must_not_call": [],
+        "max_tool_calls": 3,
+        "typed_assertions": [
+          {
+            "operator": "tool_called",
+            "tool": "web_search"
+          },
+          {
+            "operator": "max_tool_calls",
+            "maximum": 3
+          }
+        ],
+        "explanation": [
+          "today's exchange rate cannot come from training data, so answering without a search is guessing",
+          "no_tool_for_explanation is the other side of the rule: what needs no outside fact is answered without a tool",
+          "no assertion on the answer: the bench search returns pages unrelated to the rate, the model rightly searches again, and that second egress after a tainted result waits for an Operator the bench does not have"
         ]
       }
     }
