@@ -365,6 +365,71 @@ describe("App", () => {
     expect(screen.queryByRole("img", { name: "print.png" })).not.toBeInTheDocument();
   });
 
+  it("o run de uma conversa não invade a que o Operator abriu depois", async () => {
+    const user = userEvent.setup();
+    const client = new MockHarnessClient();
+    let finish: () => void = () => undefined;
+    vi.spyOn(client, "streamAgent").mockImplementation(async (input, onEvent) => {
+      onEvent({ type: "RUN_STARTED", threadId: input.threadId, runId: input.runId! });
+      onEvent({ type: "STEP_STARTED", stepName: "step-1" });
+      onEvent({ type: "TEXT_MESSAGE_START", messageId: "m1", role: "assistant" });
+      onEvent({ type: "TEXT_MESSAGE_CONTENT", messageId: "m1", delta: "resposta da 128" });
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      onEvent({ type: "STEP_STARTED", stepName: "step-2" });
+      return { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId! };
+    });
+    render(<App client={client} />);
+
+    await screen.findByRole("heading", { name: "Refinar retenção por conversa" });
+    await user.type(screen.getByLabelText("Solicitação para o Harness"), "pergunta");
+    await user.click(screen.getByRole("button", { name: "Enviar solicitação" }));
+    expect(await screen.findByText("resposta da 128")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Verificação de página/ }));
+    await screen.findByRole("heading", { name: "Verificação de página" });
+    expect(screen.queryByText("resposta da 128")).not.toBeInTheDocument();
+
+    // O fim do run da 128 dispara refresh dela; a tela continua na 127.
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByRole("heading", { name: "Verificação de página" })).toBeInTheDocument();
+    expect(screen.queryByText("resposta da 128")).not.toBeInTheDocument();
+  });
+
+  it("sem stream próprio, acompanha o Turn ativo até ele terminar", async () => {
+    const client = new MockHarnessClient();
+    const original = client.getChatSnapshot.bind(client);
+    let calls = 0;
+    // Como depois de recarregar a página no meio de um Turn: o servidor diz que
+    // há Turn ativo e nenhuma aba tem o stream dele.
+    vi.spyOn(client, "getChatSnapshot").mockImplementation(async (conversationId) => {
+      const snapshot = await original(conversationId);
+      calls += 1;
+      if (calls > 2) return snapshot;
+      return {
+        ...snapshot,
+        activeTurn: {
+          id: "turn-live",
+          conversation_id: snapshot.conversationId!,
+          request_id: "request-live",
+          status: "active",
+          started_at: new Date().toISOString(),
+          ended_at: null,
+          terminal_outcome: null,
+        },
+      };
+    });
+    render(<App client={client} />);
+
+    await screen.findByRole("heading", { name: "Refinar retenção por conversa" });
+    expect(screen.getByRole("button", { name: /Parar/ })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: /Parar/ })).toBeDisabled(), {
+      timeout: 5000,
+    });
+  });
+
   it("mostra o consumo da janela de contexto enquanto o turno roda", async () => {
     const user = userEvent.setup();
     const client = new MockHarnessClient();

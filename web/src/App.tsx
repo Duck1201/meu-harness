@@ -85,6 +85,9 @@ interface AppData {
 
 interface LiveRun {
   runId: string;
+  // A conversa dona do run: sem ela o stream de uma conversa era desenhado na
+  // que estivesse aberta.
+  conversationId: string;
   status: "queued" | "running" | "finished" | "error";
   reasoning: string;
   content: string;
@@ -544,6 +547,8 @@ function LoadError({ message }: { message: string }) {
   );
 }
 
+const TURN_POLL_MS = 1500;
+
 function ChatArea({
   snapshot,
   client,
@@ -560,6 +565,10 @@ function ChatArea({
   const [liveRuns, setLiveRuns] = useState<Record<string, LiveRun>>({});
   const controllers = useRef(new Set<AbortController>());
   const snapshotRequest = useRef(0);
+  // A conversa que o Operator escolheu, atualizada no clique e não quando o
+  // snapshot chega: um refresh disparado por outra conversa, que chegue depois,
+  // não pode trocar a tela por baixo dele.
+  const selectedId = useRef(snapshot.conversationId);
 
   useEffect(
     () => () => {
@@ -572,12 +581,19 @@ function ChatArea({
   const replaceSnapshot = async (load: () => Promise<ChatSnapshot>) => {
     const request = ++snapshotRequest.current;
     const next = await load();
-    if (request === snapshotRequest.current) onSnapshot(next);
+    if (request === snapshotRequest.current) {
+      selectedId.current = next.conversationId;
+      onSnapshot(next);
+    }
     return next;
   };
 
-  const refresh = (conversationId = snapshot.conversationId) =>
-    replaceSnapshot(() => client.getChatSnapshot(conversationId));
+  const refresh = async (conversationId = selectedId.current) => {
+    // O run de uma conversa que o Operator deixou segue vivo, mas não manda
+    // mais na tela: o snapshot dela só vale quando ela voltar a ser a aberta.
+    if (conversationId !== selectedId.current) return null;
+    return replaceSnapshot(() => client.getChatSnapshot(conversationId));
+  };
 
   const runAction = async (name: string, action: () => Promise<void>) => {
     setBusyAction(name);
@@ -594,9 +610,8 @@ function ChatArea({
   };
 
   const selectConversation = (conversationId: string) => {
-    for (const controller of controllers.current) controller.abort();
-    controllers.current.clear();
-    setLiveRuns({});
+    // Os streams das outras conversas continuam: ao voltar, o progresso está lá.
+    selectedId.current = conversationId;
     void runAction("select", async () => {
       await replaceSnapshot(() => client.selectConversation(conversationId));
       setSidebarOpen(false);
@@ -606,6 +621,7 @@ function ChatArea({
   const createConversation = async (root: string, name: string) => {
     return runAction("create", async () => {
       const conversation = await client.createConversation(root, name);
+      selectedId.current = conversation.id;
       await replaceSnapshot(() => client.selectConversation(conversation.id));
       setSidebarOpen(false);
     });
@@ -625,6 +641,7 @@ function ChatArea({
     if (!snapshot.conversationId) return;
     void runAction("archive", async () => {
       await client.archiveConversation(snapshot.conversationId!);
+      selectedId.current = null;
       await replaceSnapshot(() => client.getChatSnapshot(null));
     });
   };
@@ -634,6 +651,7 @@ function ChatArea({
     if (!window.confirm("Excluir esta conversa permanentemente?")) return;
     void runAction("delete", async () => {
       await client.deleteConversation(snapshot.conversationId!);
+      selectedId.current = null;
       await replaceSnapshot(() => client.getChatSnapshot(null));
     });
   };
@@ -659,6 +677,7 @@ function ChatArea({
       ...current,
       [runId]: {
         runId,
+        conversationId,
         status: "queued",
         reasoning: "",
         content: "",
@@ -772,18 +791,35 @@ function ChatArea({
     });
   };
 
-  const liveMessages = Object.values(liveRuns)
+  const runsHere = Object.values(liveRuns).filter(
+    (run) => run.conversationId === snapshot.conversationId,
+  );
+  const liveMessages = runsHere
     // O consumo da janela também segura a mensagem ao vivo: ele chega antes do
     // primeiro token, que é justamente quando saber quanto sobrou tem valor.
     .filter(
       (run) => run.content || run.reasoning || run.tools.length || run.error || run.contextUsage,
     )
     .map(liveRunMessage);
-  const isRunning =
-    snapshot.activeTurn !== null ||
-    Object.values(liveRuns).some(
-      (run) => run.status === "queued" || run.status === "running",
-    );
+  const streamingHere = runsHere.some(
+    (run) => run.status === "queued" || run.status === "running",
+  );
+  const isRunning = snapshot.activeTurn !== null || streamingHere;
+  // Turn ativo ou fila sem um stream desta aba para avisar do fim: aconteceu
+  // depois de recarregar a página ou de trocar de conversa e voltar, e a UI
+  // ficava mostrando "rodando" até o Operator recarregar de novo.
+  const needsPolling =
+    !streamingHere &&
+    (snapshot.activeTurn !== null || snapshot.pendingRequests.length > 0);
+  useEffect(() => {
+    if (!needsPolling || !snapshot.conversationId) return;
+    const conversationId = snapshot.conversationId;
+    const timer = window.setTimeout(() => {
+      void refresh(conversationId).catch(() => undefined);
+    }, TURN_POLL_MS);
+    return () => window.clearTimeout(timer);
+    // Cada snapshot novo reagenda o próximo; refresh confere a conversa pela ref.
+  }, [needsPolling, snapshot]);
   const hasWorkspaces = snapshot.workspaces.length > 0;
   const hasConversation = snapshot.conversationId !== null;
 
@@ -923,7 +959,7 @@ function ChatArea({
                   <span>
                     {snapshot.activeTurn ? "Turn em execução" : "Aguardando na fila"}
                   </span>
-                  <span>{Object.keys(liveRuns).length} stream(s)</span>
+                  <span>{runsHere.length} stream(s)</span>
                 </div>
               )}
               {!snapshot.messages.length && !liveMessages.length && (
