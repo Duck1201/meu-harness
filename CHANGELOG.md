@@ -69,7 +69,9 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 - **Três Challengers medidos contra o E4B QAT:** E4B Q8_0 e 12B QAT no Ollama, 26B-A4B
   QAT no llama.cpp com os especialistas de 24 das 30 camadas na RAM. O 12B e o 26B-A4B
   acertaram 24/24 casos reais contra 20/24 do E4B, a 67 e 70 s por resposta contra 19 s;
-  nenhum perfil mudou de status. Detalhe em `evals/README.md`.
+  nenhum perfil mudou de status. Depois da medição, o E4B Q8_0 e o 12B foram
+  aposentados a pedido do Operator (modelos e Modelfiles removidos, perfis mantidos
+  como registro); o 26B-A4B segue Challenger. Detalhe em `evals/README.md`.
 - **Coletor de traces para fine-tuning.** `scripts/collect-model-traces.py` grava em
   `datasets/model-traces/` as trocas exatas com o modelo em cada passo (ModelView,
   schemas, saída, sem reasoning), montado por `build_live_model_runner`.

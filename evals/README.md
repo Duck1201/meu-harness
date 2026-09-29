@@ -250,4 +250,5 @@ custa ~0,42 GB: 30 na RAM dão 3,7 GB e 22,7 tok/s, 24 dão 6,2 GB e 25,5 tok/s.
 Três repetições por cenário é amostra pequena e o `model_smoke` está saturado, então
 nenhum perfil mudou de status: trocar o core passa pelo protocolo de promoção. A
 bancada que refaz Turns do Operator fica fora do repositório, porque os Turns são
-conversas dele; o que fica aqui é o resultado.
+conversas dele; o que fica aqui é o resultado. Depois da medição, o E4B Q8_0 e o 12B foram
+aposentados (`status: retired`) e saíram do host; o 26B-A4B segue Challenger.

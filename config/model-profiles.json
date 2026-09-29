@@ -605,7 +605,8 @@
     {
       "id": "gemma4_e4b_q8_ollama",
       "internal_automation_role": "user",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Aposentado em 29/09/2026 a pedido do Operator: no bake-off não superou o Q4_0 QAT (20/24 Turns reais, 99/105 no model_smoke, 34 s por resposta contra 19 s); modelo e Modelfile removidos do host e do repositório, perfil mantido como registro da medição.",
       "release_eligible": false,
       "profile_digest_sha256": "64eef41c8d7dc40331b5077af75a39305518c1ebd73f830fba57458efe38c860",
       "model": {
@@ -785,7 +786,8 @@
     {
       "id": "gemma4_12b_qat_ollama",
       "internal_automation_role": "user",
-      "status": "challenger",
+      "status": "retired",
+      "retired_note": "Aposentado em 29/09/2026 a pedido do Operator: acertou 24/24 Turns reais mas a 67 s por resposta e 99/105 no model_smoke, abaixo do 26B-A4B no mesmo custo; modelo e Modelfile removidos do host e do repositório, perfil mantido como registro da medição.",
       "release_eligible": false,
       "profile_digest_sha256": "64987838e53553f5cd3a4bef22da7944c98ed9c7b72ee937b8c59387dbc980b1",
       "model": {
