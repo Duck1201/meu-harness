@@ -6,6 +6,19 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ### Alterado
 
+- **O projeto se chama Meu Harness.** Nome de exibição, pacotes (`meu-harness`,
+  `meu-harness-web`), diretórios de config e estado e o User-Agent do coletor; o
+  comando `harness` e o pacote Python `harness` ficam. O repositório no GitHub virou
+  `Duck1201/meu-harness`.
+- **O prompt manda buscar o que o modelo não sabe.** Fato recente, preço, pessoa,
+  produto, lei ou nome desconhecido vai para o `web_search` no mesmo passo, em vez
+  de resposta de memória; a frase só entra com o `web_search` no catálogo. Resultado
+  de tool é final: o modelo nunca pede para esperar. `describe_image` orienta a pedir
+  a transcrição dos valores de um print de problema, não a descrição do layout.
+- **Todo modelo sai de um Modelfile versionado.** Embedding (`harness-bge-m3`),
+  visão (`harness-vision-qwen35-2b`), juiz e OCR ganharam Modelfile e tag própria;
+  `scripts/install-models.sh` reinstala todos.
+
 - **RAG: lista de exercícios nunca é passagem, e atividade vira uma busca por
   pergunta.** No Kurose, as atividades do Operator eram as Questões de revisão do
   livro, e a página que as lista ganhava a busca por conter a pergunta palavra por
@@ -50,6 +63,17 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ### Adicionado
 
+- **Medidor de tokens por segundo no chat.** O runtime mede cada geração, o evento
+  `generation_stats` leva tokens e tempos, e a mensagem ao vivo mostra tok/s do
+  passo, leitura do prompt e média do Turn; ao terminar, fica a última medição.
+- **Três Challengers medidos contra o E4B QAT:** E4B Q8_0 e 12B QAT no Ollama, 26B-A4B
+  QAT no llama.cpp com os especialistas de 24 das 30 camadas na RAM. O 12B e o 26B-A4B
+  acertaram 24/24 casos reais contra 20/24 do E4B, a 67 e 70 s por resposta contra 19 s;
+  nenhum perfil mudou de status. Detalhe em `evals/README.md`.
+- **Coletor de traces para fine-tuning.** `scripts/collect-model-traces.py` grava em
+  `datasets/model-traces/` as trocas exatas com o modelo em cada passo (ModelView,
+  schemas, saída, sem reasoning), montado por `build_live_model_runner`.
+
 - **OCR de PDF escaneado no RAG** ([ADR-0018](docs/adr/0018-ocr-for-scanned-pdfs.md)).
   O PDF sem camada de texto, antes recusado, vira um job em segundo plano:
   `pdftoppm` renderiza cada página e o GLM-OCR lê, ~10 s por página. O texto entra
@@ -88,6 +112,20 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
   0 contra 3.
 
 ### Corrigido
+
+- **O chat mostrava "rodando" depois de o Turn acabar,** quando a página era
+  recarregada ou a conversa trocada no meio do Turn: o chat passou a consultar o
+  servidor enquanto há Turn ativo sem stream próprio.
+- **Uma conversa aparecia dentro de outra.** Runs ao vivo agora pertencem à sua
+  conversa, e o refresh de uma conversa deixada nunca troca a tela.
+- **A confirmação dispensada pelo yolo ficava entre a tool call e o resultado,** e o
+  Gemma respondia "estou buscando, aguarde" com os resultados no contexto; 2 de 3
+  rodadas antes, 4 de 4 certas depois.
+- **O desafio anti-bot do DuckDuckGo virava busca vazia.** Agora é `failed` com
+  `provider_blocked`, e o fallback usa User-Agent de navegador.
+- **Apagar conversa com Turn rodando** deixava o worker escrevendo numa conversa
+  inexistente; apagar uma ou todas agora cancela o worker antes.
+- **Página em branco num PDF** (sem `/Contents`) derrubava a ingestão do arquivo.
 
 - **`edit` repara os dois erros que o modelo mais comete.** O bloco sem a quebra
   final ganha a quebra de volta; antes era recusado, e o modelo dizia ao

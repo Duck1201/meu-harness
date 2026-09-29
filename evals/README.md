@@ -215,3 +215,39 @@ Os casos: uma tabela de valores de golpe do Pix (os retornos e os três selos), 
 retrato (óculos, cor do cabelo e da roupa) e um desenho do Bart com emojis de
 fundo (o modelo viu que os corações são partidos).
 
+
+## Tamanho e quantização do Gemma 4
+
+Medição de 2026-09-29, pedida pelo Operator: um modelo maior ou menos quantizado
+erraria menos? Quatro braços, com os mesmos parâmetros do Modelfile core, cada um
+fixado por digest em `config/model-profiles.json`: E4B QAT Q4_0 (o core), E4B Q8_0,
+12B QAT Q4_0 e 26B-A4B QAT Q4_0 no llama.cpp com `--n-cpu-moe 24`.
+
+Além do `model_smoke`, cada braço refez 3 vezes oito Turns reais do Operator: o bug
+do IMC com print (altura 185 digitada em centímetros), duas buscas web e cinco
+Questões de revisão do Kurose contra o Corpus `redes-faculdade`, conferidas pelo
+gabarito do livro. As respostas foram lidas uma a uma; o critério por palavra-chave
+errou dois casos a favor do E4B, e a contagem abaixo já os corrige.
+
+| Braço | Turns reais (24) | `model_smoke` (105) | VRAM | Geração | Tempo por resposta |
+|---|---|---|---|---|---|
+| E4B QAT Q4_0 (core) | 20 | 103 | 5,4 GB | 56 tok/s | 19 s |
+| E4B Q8_0 | 20 | 99 | 7,3 GB | 31 tok/s | 34 s |
+| 12B QAT Q4_0 | 24 | 99 | 7,1 GB | 14 tok/s | 67 s |
+| 26B-A4B QAT Q4_0 | 24 | 103 | 6,3 GB | 23 tok/s | 70 s |
+| 26B-A4B sem thinking | 23 | — | 6,3 GB | 24 tok/s | 36 s |
+| E4B QAT sem thinking | 17 | — | 5,4 GB | 57 tok/s | 12 s |
+
+O Q8_0 não ganha do Q4_0 QAT em nada, como o QAT promete. Os erros do E4B se
+concentram onde é preciso ler o livro com atenção — a questão 9 com "concordo" e
+"discordo" invertidos e a 11 com as classes de serviço inventadas —, e os dois
+modelos maiores acertaram as quinze. O 26B-A4B gera ~1160 tokens por resposta
+contra ~600 dos outros, e desligar o thinking corta o tempo pela metade, mas foi o
+único braço em que Turns terminaram em `malformed_model_response_limit` (1 em 24; no
+E4B, 2). Na placa de 8 GB, cada camada de especialistas do 26B-A4B levada à GPU
+custa ~0,42 GB: 30 na RAM dão 3,7 GB e 22,7 tok/s, 24 dão 6,2 GB e 25,5 tok/s.
+
+Três repetições por cenário é amostra pequena e o `model_smoke` está saturado, então
+nenhum perfil mudou de status: trocar o core passa pelo protocolo de promoção. A
+bancada que refaz Turns do Operator fica fora do repositório, porque os Turns são
+conversas dele; o que fica aqui é o resultado.
