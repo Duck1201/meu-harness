@@ -179,7 +179,9 @@ async def _warm_up(runtime: OllamaRuntime) -> None:
     )
 
 
-async def collect(seeds: Sequence[int], output: Path, tokenizer: Path) -> int:
+async def collect(
+    seeds: Sequence[int], output: Path, tokenizer: Path, only: Sequence[str] = ()
+) -> int:
     config = load_config()
     catalog = load_eval_catalog(
         ROOT / "evals/fixtures/regressions.json",
@@ -212,7 +214,17 @@ async def collect(seeds: Sequence[int], output: Path, tokenizer: Path) -> int:
         browser_guard=BraveEgressGuard(),
     )
     runner = live.runner
-    fixtures = [item for item in catalog.dataset.fixtures if runner.supports(item.type)]
+    fixtures = [
+        item
+        for item in catalog.dataset.fixtures
+        if runner.supports(item.type) and (not only or item.id in only)
+    ]
+    unknown = sorted(set(only) - {item.id for item in fixtures})
+    if unknown:
+        print(f"unknown or unsupported fixtures: {', '.join(unknown)}", file=sys.stderr)
+        await live.aclose()
+        await runtime.aclose()
+        return 2
     provenance = {
         "runtime_profile": config.runtime_profile.id,
         "model": config.runtime_profile.model.id,
@@ -262,6 +274,13 @@ def main() -> int:
         dest="seeds",
         help="repeatable; defaults to the three recorded protocol seeds",
     )
+    parser.add_argument(
+        "--fixture",
+        action="append",
+        dest="fixtures",
+        default=[],
+        help="repeatable; collects only these fixture ids",
+    )
     # O tokenizer é o do perfil da rota, pelo mesmo diretório que a bancada usa.
     parser.add_argument(
         "--tokenizer",
@@ -273,7 +292,9 @@ def main() -> int:
         print(f"tokenizer not found: {arguments.tokenizer}", file=sys.stderr)
         return 2
     seeds = tuple(arguments.seeds) if arguments.seeds else PROTOCOL_SEEDS
-    return asyncio.run(collect(seeds, arguments.output, arguments.tokenizer))
+    return asyncio.run(
+        collect(seeds, arguments.output, arguments.tokenizer, tuple(arguments.fixtures))
+    )
 
 
 if __name__ == "__main__":
