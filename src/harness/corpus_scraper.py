@@ -35,7 +35,7 @@ from .web_tools import (
     HttpTransport,
 )
 
-USER_AGENT = "harness-2-corpus/1.0 (local operator tool)"
+USER_AGENT = "meu-harness-corpus/1.0 (local operator tool)"
 _MAX_REDIRECTS = 5
 _MAX_PAGE_BYTES = 4 * 1024 * 1024
 _TIMEOUT_SECONDS = 30.0

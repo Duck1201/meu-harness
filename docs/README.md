@@ -1,6 +1,6 @@
-# Documentação do Harness 2.0
+# Documentação do Meu Harness
 
-Contrato vigente do Harness 2.0. A primeira release tem um único RuntimeProfile
+Contrato vigente do Meu Harness. A primeira release tem um único RuntimeProfile
 funcional, local via Ollama; demais runtimes e modelos não pertencem
 automaticamente ao roadmap.
 

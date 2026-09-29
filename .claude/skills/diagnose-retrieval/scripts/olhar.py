@@ -17,7 +17,7 @@ from harness.config import load_config
 from harness.corpus_store import CorpusStore
 from harness.ollama_runtime import OllamaEmbeddingRuntime
 
-HOST = json.loads((Path.home() / ".config/harness-2/host.json").read_text())
+HOST = json.loads((Path.home() / ".config/meu-harness/host.json").read_text())
 CORPORA = Path(HOST["state_dir"]) / "corpora"
 
 PERGUNTA = sys.argv[1]

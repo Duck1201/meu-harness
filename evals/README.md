@@ -1,4 +1,4 @@
-# Avaliações do Harness 2.0
+# Avaliações do Meu Harness
 
 Este diretório transforma a herança empírica e o contrato vigente em avaliações
 web repetíveis. As fixtures não copiam conteúdo de produção: reproduzem o

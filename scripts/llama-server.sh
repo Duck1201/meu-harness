@@ -14,7 +14,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-HOST_JSON=${HOST_JSON:-${XDG_CONFIG_HOME:-$HOME/.config}/harness-2/host.json}
+HOST_JSON=${HOST_JSON:-${XDG_CONFIG_HOME:-$HOME/.config}/meu-harness/host.json}
 
 LINES=$(
   python3 - "$ROOT" "$HOST_JSON" "${1:-}" <<'PY'

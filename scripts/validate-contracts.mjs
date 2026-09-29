@@ -987,7 +987,7 @@ check(
 );
 const contextHeadings = contextContent.match(/^#{1,6}\s+.+$/gm) ?? [];
 check(
-  sameValues(contextHeadings, ["# Harness 2.0", "## Language"]),
+  sameValues(contextHeadings, ["# Meu Harness", "## Language"]),
   "CONTEXT.md deve ser apenas glossário no formato domain-modeling",
 );
 

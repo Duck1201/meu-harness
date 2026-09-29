@@ -125,7 +125,7 @@ def test_host_config_replace_is_atomic_when_the_final_swap_fails(
 def test_default_host_path_uses_xdg_config_home(tmp_path: Path) -> None:
     store = HostConfigStore(environ={"XDG_CONFIG_HOME": str(tmp_path)})
 
-    assert store.path == (tmp_path / "harness-2" / "host.json").resolve()
+    assert store.path == (tmp_path / "meu-harness" / "host.json").resolve()
 
 
 def test_host_config_rejects_nonexistent_roots_relative_paths_and_invalid_urls(

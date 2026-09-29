@@ -19,7 +19,7 @@ describe("App", () => {
     await user.click(within(emptyState as HTMLElement).getByRole("button", { name: "Nova conversa" }));
 
     await waitFor(() =>
-      expect(create).toHaveBeenCalledWith("/workspaces/harness-2", "Nova conversa"),
+      expect(create).toHaveBeenCalledWith("/workspaces/meu-harness", "Nova conversa"),
     );
     expect(screen.queryByRole("combobox", { name: "Raiz autorizada" })).toBeNull();
   });
@@ -79,7 +79,7 @@ describe("App", () => {
     await user.type(name, "Conversation criada");
     await user.click(screen.getByRole("button", { name: "Criar" }));
     await waitFor(() =>
-      expect(create).toHaveBeenCalledWith("/workspaces/harness-2", "Conversation criada"),
+      expect(create).toHaveBeenCalledWith("/workspaces/meu-harness", "Conversation criada"),
     );
   });
 
@@ -212,7 +212,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(update).toHaveBeenCalledWith(
         expect.objectContaining({
-          allowed_workspace_roots: ["/workspaces/harness-2"],
+          allowed_workspace_roots: ["/workspaces/meu-harness"],
           searxng_url: "http://127.0.0.1:8080/search",
           ollama_url: "http://127.0.0.1:11434",
         }),
@@ -237,14 +237,14 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Token de setup"), "token-do-stderr");
     await user.type(
       screen.getByLabelText("Raízes de Workspace autorizadas"),
-      "/workspaces/harness-2",
+      "/workspaces/meu-harness",
     );
     const stateDirField = screen.getByLabelText("Diretório de estado");
     await user.clear(stateDirField);
-    await user.type(stateDirField, "/var/lib/harness-2");
+    await user.type(stateDirField, "/var/lib/meu-harness");
     const tokenizerPathField = screen.getByLabelText("Caminho do tokenizer.json");
     await user.clear(tokenizerPathField);
-    await user.type(tokenizerPathField, "/var/lib/harness-2/tokenizer.json");
+    await user.type(tokenizerPathField, "/var/lib/meu-harness/tokenizer.json");
     const originsField = screen.getByLabelText("Origins autorizadas");
     // Loopback tem duas grafias e o navegador manda a que foi digitada na barra:
     // o formulário sugere o par para o painel não virar 403 pela outra.
@@ -257,9 +257,9 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(complete).toHaveBeenCalledWith("token-do-stderr", {
-        allowed_workspace_roots: ["/workspaces/harness-2"],
-        state_dir: "/var/lib/harness-2",
-        tokenizer_path: "/var/lib/harness-2/tokenizer.json",
+        allowed_workspace_roots: ["/workspaces/meu-harness"],
+        state_dir: "/var/lib/meu-harness",
+        tokenizer_path: "/var/lib/meu-harness/tokenizer.json",
         allowed_origins: ["http://127.0.0.1:8765"],
         searxng_url: null,
       }),

@@ -29,7 +29,7 @@ import type {
 const now = "2026-08-10T10:43:00Z";
 
 const initialWorkspaces: Workspace[] = [
-  { id: "workspace-harness", root: "/workspaces/harness-2" },
+  { id: "workspace-harness", root: "/workspaces/meu-harness" },
   { id: "workspace-bench", root: "/workspaces/bench" },
 ];
 
@@ -59,7 +59,7 @@ const initialGrants: Grant[] = [
     id: "grant-root",
     conversation_id: "chat-128",
     permission: "WorkspaceRootGrant",
-    scope: "/workspaces/harness-2",
+    scope: "/workspaces/meu-harness",
     granted_at: now,
     expires_at: null,
   },
@@ -176,10 +176,10 @@ export class MockHarnessClient implements HarnessClient {
   private selectedCorpus = new Map<string, string | null>();
   private yolo = false;
   private hostConfig: HostConfigSnapshot = {
-    allowed_workspace_roots: ["/workspaces/harness-2"],
-    tokenizer_path: "/home/operator/.local/state/harness-2/tokenizer.json",
+    allowed_workspace_roots: ["/workspaces/meu-harness"],
+    tokenizer_path: "/home/operator/.local/state/meu-harness/tokenizer.json",
     tokenizer_digest: "0".repeat(64),
-    state_dir: "/home/operator/.local/state/harness-2",
+    state_dir: "/home/operator/.local/state/meu-harness",
     allowed_origins: ["http://127.0.0.1:8765"],
     searxng_url: null,
     ollama_url: "http://127.0.0.1:11434",
@@ -197,8 +197,8 @@ export class MockHarnessClient implements HarnessClient {
     required: false,
     restart_required: false,
     token_expires_at: null,
-    suggested_state_dir: "/home/operator/.local/state/harness-2",
-    suggested_tokenizer_path: "/home/operator/.local/state/harness-2/tokenizer.json",
+    suggested_state_dir: "/home/operator/.local/state/meu-harness",
+    suggested_tokenizer_path: "/home/operator/.local/state/meu-harness/tokenizer.json",
   };
   private runs = clone(initialRuns);
   private reports = clone(initialReports);
@@ -865,8 +865,8 @@ export class MockHarnessClient implements HarnessClient {
       required: true,
       restart_required: false,
       token_expires_at: tokenExpiresAt,
-      suggested_state_dir: "/home/operator/.local/state/harness-2",
-      suggested_tokenizer_path: "/home/operator/.local/state/harness-2/tokenizer.json",
+      suggested_state_dir: "/home/operator/.local/state/meu-harness",
+      suggested_tokenizer_path: "/home/operator/.local/state/meu-harness/tokenizer.json",
     };
   }
 

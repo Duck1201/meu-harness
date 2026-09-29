@@ -10,7 +10,7 @@ from .api import DEFAULT_PORT, create_app
 def main() -> None:
     # Só o que precisa existir antes do app entra por flag: onde ouvir, e qual
     # host.json ler. Todo o resto vem do próprio host.json, editável no painel.
-    parser = argparse.ArgumentParser(prog="harness", description="Sobe o servidor do Harness 2.0.")
+    parser = argparse.ArgumentParser(prog="harness", description="Sobe o servidor do Meu Harness.")
     parser.add_argument("--host", default="127.0.0.1", help="interface de bind")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="porta HTTP")
     parser.add_argument("--host-config", default=None, help="caminho alternativo do host.json")

@@ -1,4 +1,4 @@
-# Decisões normativas do Harness 2.0
+# Decisões normativas do Meu Harness
 
 > Versão: 2  
 > Data: 15 de agosto de 2026  

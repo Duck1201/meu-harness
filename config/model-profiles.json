@@ -450,7 +450,7 @@
         "installed_tag": "harness-gemma4-e4b-qat:latest",
         "installed_profile_digest_sha256": "bd0b01eca795c325997c317115539f6465193c1daece8579bc80a038d21a9a92",
         "repository_modelfile": "modelfiles/gemma4_e4b_qat_ollama.Modelfile",
-        "repository_modelfile_sha256": "3a265e2dc775befce49fde730da102d4d45c5b0e92b4b2d1e72d4003b6d42c1b",
+        "repository_modelfile_sha256": "fe63e8343e8120281bb3e3c98ea05019c26b62eb44cfde159aeb0bbf2b471add",
         "matches_repository_modelfile": true,
         "parameters": {
           "num_ctx": "65536",
@@ -476,7 +476,7 @@
           "evidence": {
             "kind": "digest_sha256",
             "subject": "gemma4_e4b_qat_ollama.Modelfile",
-            "sha256": "3a265e2dc775befce49fde730da102d4d45c5b0e92b4b2d1e72d4003b6d42c1b"
+            "sha256": "fe63e8343e8120281bb3e3c98ea05019c26b62eb44cfde159aeb0bbf2b471add"
           }
         },
         {

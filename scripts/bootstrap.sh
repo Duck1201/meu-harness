@@ -53,7 +53,7 @@ else
   echo "==> ollama não encontrado, pulando criação do perfil" >&2
 fi
 
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/harness-2"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/meu-harness"
 tokenizer_path="$state_dir/tokenizer-$profile_id.json"
 if [ ! -f "$tokenizer_path" ]; then
   echo "==> baixando tokenizer.json de $profile_id para $tokenizer_path"
