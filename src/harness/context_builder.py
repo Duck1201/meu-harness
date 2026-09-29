@@ -145,6 +145,11 @@ class ContextBuilder:
         seen_payloads: dict[str, CanonicalHistoryEntry] = {}
         current = len(turns) - 1
         for index, turn in enumerate(turns):
+            settled = _settled_confirmations(turn)
+            # Tool calls do último passo ainda sem resultado, e as automações que
+            # chegaram nesse meio: vão depois dos resultados, nunca entre eles.
+            pending: set[str] = set()
+            deferred: list[ModelMessage] = []
             for entry in turn.entries:
                 if (
                     entry.kind is CanonicalHistoryEntryKind.REJECTED_MODEL_ATTEMPT
@@ -153,15 +158,31 @@ class ContextBuilder:
                     # Uma recusa de turno encerrado não ensina nada ao próximo passo e,
                     # repetida no contexto, vira exemplo de resposta que o modelo copia.
                     continue
+                if _confirmation_id(entry) in settled:
+                    continue
                 message = _entry_message(entry, seen_payloads, self._render_payload)
-                if (
-                    entry.kind is CanonicalHistoryEntryKind.INTERNAL_AUTOMATION
-                    and self._automation_role == "user"
-                ):
-                    message = ModelMessage(
-                        role=ModelRole.USER, content=f"[{message.name}] {message.content}"
-                    )
+                if entry.kind is CanonicalHistoryEntryKind.INTERNAL_AUTOMATION:
+                    if self._automation_role == "user":
+                        message = ModelMessage(
+                            role=ModelRole.USER, content=f"[{message.name}] {message.content}"
+                        )
+                    if pending:
+                        deferred.append(message)
+                    else:
+                        messages.append(message)
+                    continue
+                if entry.kind is CanonicalHistoryEntryKind.TOOL_RESULT:
+                    messages.append(message)
+                    pending.discard(message.tool_call_id or "")
+                    if not pending:
+                        messages.extend(deferred)
+                        deferred.clear()
+                    continue
+                messages.extend(deferred)
+                deferred.clear()
                 messages.append(message)
+                pending = {call.id for call in message.tool_calls}
+            messages.extend(deferred)
         return tuple(messages)
 
 
@@ -213,6 +234,35 @@ def _entry_message(
             name=_optional_string(payload, "automation_id"),
         )
     raise ContextBuilderError(f"unsupported canonical history entry: {entry.kind}")
+
+
+_CONFIRMATION_AUTOMATION = "operator_confirmation"
+
+
+def _confirmation_id(entry: CanonicalHistoryEntry) -> str | None:
+    if entry.kind is not CanonicalHistoryEntryKind.INTERNAL_AUTOMATION:
+        return None
+    if entry.payload.get("automation_id") != _CONFIRMATION_AUTOMATION:
+        return None
+    value = entry.payload.get("confirmation_id")
+    return value if isinstance(value, str) else None
+
+
+def _settled_confirmations(turn: ContextTurn) -> frozenset[str]:
+    """Confirmações aprovadas ou dispensadas: o ToolResult que vem depois já diz tudo.
+
+    Num Turn real, o yolo dispensou a confirmação de um web_search e o registro
+    dela — um JSON em inglês com as tool calls — chegou ao Gemma como mensagem de
+    usuário entre a chamada e o resultado. Com os resultados já no contexto, o
+    modelo respondeu "estou buscando, aguarde". Negada, ela fica: é o único
+    registro de que a chamada não rodou.
+    """
+    return frozenset(
+        confirmation
+        for entry in turn.entries
+        if (confirmation := _confirmation_id(entry)) is not None
+        and entry.payload.get("status") in {"approved", "waived"}
+    )
 
 
 def _rejection_notice(payload: Mapping[str, JsonValue]) -> str:

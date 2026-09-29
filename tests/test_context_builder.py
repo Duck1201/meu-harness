@@ -482,3 +482,100 @@ def test_html_reaches_the_model_as_written_and_template_markers_do_not() -> None
     for marker in ("<|turn>", "<turn|>", "</think>", "<tool_call>", '<|\\"|>', "<eos>"):
         assert marker not in content
     assert content.count("\\u003c") == 6
+
+
+def _call_then_result(*automations: Mapping[str, JsonValue]) -> ContextTurn:
+    call = {"id": "call-1", "name": "web_search", "arguments": {"query": "urubu do pix"}}
+    entries = [
+        entry(1, "turn-1", CanonicalHistoryEntryKind.USER_MESSAGE, {"content": "busca"}),
+        entry(
+            2,
+            "turn-1",
+            CanonicalHistoryEntryKind.MODEL_ATTEMPT,
+            {"content": None, "tool_calls": [call]},
+        ),
+    ]
+    entries += [
+        entry(3 + offset, "turn-1", CanonicalHistoryEntryKind.INTERNAL_AUTOMATION, automation)
+        for offset, automation in enumerate(automations)
+    ]
+    entries.append(
+        entry(
+            9,
+            "turn-1",
+            CanonicalHistoryEntryKind.TOOL_RESULT,
+            {
+                "tool_call_id": "call-1",
+                "tool_name": "web_search",
+                "status": "success",
+                "retryable": False,
+                "data": {"results": [{"title": "Urubu do Pix"}]},
+                "error": None,
+                "meta": {"producer": "web_search", "truncated": False, "taints": []},
+            },
+        )
+    )
+    return ContextTurn(turn_id="turn-1", entries=tuple(entries))
+
+
+def _roles(turn: ContextTurn) -> list[str]:
+    builder = ContextBuilder(FakeEstimator(), context_window=32768, automation_role="user")
+    context = builder.build(system="s", tool_schemas=(), completed_turns=(), current_turn=turn)
+    return [
+        f"{message.role.value}:{message.content.split(' ', 1)[0][:20]}"
+        for message in context.messages[1:]
+    ]
+
+
+def test_a_waived_confirmation_never_sits_between_a_call_and_its_result() -> None:
+    """Num Turn real o Gemma respondeu "estou buscando, aguarde" com o resultado já ali."""
+    waived = {
+        "automation_id": "operator_confirmation",
+        "confirmation_id": "c-1",
+        "status": "waived",
+        "reason_code": "web_access_grant_waived",
+    }
+
+    assert _roles(_call_then_result(waived)) == [
+        "user:busca",
+        "assistant:",
+        'tool:{"data":{"results":[',
+    ]
+
+
+def test_a_denied_confirmation_stays_because_nothing_else_records_it() -> None:
+    requested = {"automation_id": "operator_confirmation", "confirmation_id": "c-1"}
+    denied = {**requested, "status": "denied", "reason_code": "operator_denied"}
+    turn = ContextTurn(
+        turn_id="turn-1",
+        entries=(
+            entry(1, "turn-1", CanonicalHistoryEntryKind.USER_MESSAGE, {"content": "busca"}),
+            entry(
+                2,
+                "turn-1",
+                CanonicalHistoryEntryKind.MODEL_ATTEMPT,
+                {"content": None, "tool_calls": [{"id": "call-1", "name": "web_search"}]},
+            ),
+            entry(
+                3,
+                "turn-1",
+                CanonicalHistoryEntryKind.INTERNAL_AUTOMATION,
+                {**requested, "status": "requested"},
+            ),
+            entry(4, "turn-1", CanonicalHistoryEntryKind.INTERNAL_AUTOMATION, denied),
+        ),
+    )
+
+    roles = _roles(turn)
+    assert sum(item.startswith("user:[operator_confirm") for item in roles) == 2
+
+
+def test_an_automation_that_arrives_mid_batch_waits_for_the_results() -> None:
+    verification = {"automation_id": "page_verification", "status": "completed"}
+
+    assert _roles(_call_then_result(verification)) == [
+        "user:busca",
+        "assistant:",
+        'tool:{"data":{"results":[',
+        "user:[page_verification]",
+    ]
