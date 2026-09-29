@@ -1,4 +1,4 @@
-# Harness 2.0
+# Meu Harness
 
 Harness de agente LLM local, web-first, com policy por efeito. O modelo é tratado
 como não confiável: seleção de tool, argumentos e resultados passam por validação,
@@ -45,7 +45,7 @@ Idempotente — pode rodar de novo sem duplicar trabalho. Faz, nesta ordem:
    (só se ela ainda não existir) e confere o digest instalado contra
    `installation.installed_profile_digest_sha256`, avisando no stderr se divergir.
 4. Baixa o `tokenizer.json` do perfil (`installation.tokenizer_url`) para
-   `$XDG_STATE_HOME/harness-2/tokenizer-<perfil>.json` (ou `~/.local/state/harness-2/`
+   `$XDG_STATE_HOME/meu-harness/tokenizer-<perfil>.json` (ou `~/.local/state/meu-harness/`
    sem `XDG_STATE_HOME`), só se o arquivo ainda não existir ali.
 
 Qualquer etapa que precise de uma ferramenta ausente no PATH (`corepack`, `ollama`)
@@ -62,6 +62,12 @@ Instala as dependências Python e cria `.venv`.
 corepack enable && cd web && pnpm install && pnpm build && cd ..
 ```
 Gera `web/dist`, servido pelo próprio backend.
+
+Para reinstalar de uma vez todos os modelos que o harness usa — o perfil core, o
+embedding `bge-m3:latest` do Corpus, o `qwen3.5:2b-q4_K_M` da tool de visão e o juiz
+`harness-judge-ptbr-v2` (de
+[`modelfiles/harness_judge_ptbr_v2.Modelfile`](modelfiles/harness_judge_ptbr_v2.Modelfile)) —
+rode `scripts/install-models.sh`. Só o perfil core, à mão:
 
 ```bash
 ollama pull gemma4:e4b-it-qat
@@ -81,10 +87,10 @@ isso o digest vem de lá e não de um hash do texto do Modelfile: são valores
 diferentes, e só um deles identifica os pesos e os parâmetros de fato instalados.
 
 ```bash
-mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/harness-2"
+mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/meu-harness"
 curl -fsSL \
   https://huggingface.co/google/gemma-4-E4B-it/resolve/main/tokenizer.json \
-  -o "${XDG_STATE_HOME:-$HOME/.local/state}/harness-2/tokenizer-gemma4_e4b_qat_ollama.json"
+  -o "${XDG_STATE_HOME:-$HOME/.local/state}/meu-harness/tokenizer-gemma4_e4b_qat_ollama.json"
 ```
 Baixa o `tokenizer.json` para o mesmo caminho que o setup vai sugerir por padrão
 (veja abaixo). Pode ir para qualquer outro caminho, desde que informe esse caminho
@@ -382,7 +388,7 @@ Para desligar, use `"mode": "disabled"` em `config/harness.json#vision`.
 ### RAG: acervos por Corpus
 
 A aba **RAG** monta acervos de documentos. Cada Corpus é um arquivo SQLite em
-`$XDG_STATE_HOME/harness-2/corpora/`, isolado dos outros e dos dois stores do
+`$XDG_STATE_HOME/meu-harness/corpora/`, isolado dos outros e dos dois stores do
 harness; apagar o Corpus apaga o arquivo, e a retenção de conversas não o alcança.
 
 Alimente por upload (`.txt`, `.md`, `.html`, `.pdf` — PDF digitalizado é recusado,
@@ -485,7 +491,7 @@ Configurações preserva esses campos ao salvar):
 ```json
 {
   "llama_server_executable": "/home/voce/.local/opt/llama.cpp/llama-server",
-  "gguf_paths": {"cove_4b_llamacpp": "/home/voce/.local/share/harness-2/gguf/CoVe-4B.Q4_K_M.gguf"}
+  "gguf_paths": {"cove_4b_llamacpp": "/home/voce/.local/share/meu-harness/gguf/CoVe-4B.Q4_K_M.gguf"}
 }
 ```
 

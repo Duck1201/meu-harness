@@ -1,0 +1,7 @@
+# Meu Harness — juiz consultivo do Corpus (harness-judge-ptbr-v2, ADR 0015).
+#
+# Qwen3-Reranker-0.6B + LoRA pt-BR, mesclado e quantizado em Q8_0 no
+# ~/judge-train (runs/mix4). O GGUF não é versionado aqui; o SHA-256 esperado
+# está em config/harness.json#corpus.answer_judge.gguf_sha256. Sem TEMPLATE:
+# o juiz é chamado em modo raw e pontua yes vs. no pelos logprobs.
+FROM /home/duck/judge-train/runs/mix4/harness-judge-ptbr-v2.Q8_0.gguf
